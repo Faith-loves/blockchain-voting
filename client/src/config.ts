@@ -1,6 +1,10 @@
 export const LOCAL_CHAIN_ID = 31337; // Hardhat local node
 export const LOCAL_RPC_HINT = "http://127.0.0.1:8545";
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
+const DEFAULT_API_BASE = (import.meta.env.DEV && window)
+  ? "http://localhost:5000"
+  : window.location.origin;
+
+export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || DEFAULT_API_BASE).replace(/\/$/, "");
 
 export const CONTRACT_ADDRESS = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
 
