@@ -2,10 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { BrowserProvider, Contract } from "ethers";
 import { getSession, isLoggedIn, clearSession } from "../utils/auth";
-import { CONTRACT_ABI, CONTRACT_ADDRESS, LOCAL_CHAIN_ID } from "../config";
+import { API_BASE_URL, CONTRACT_ABI, CONTRACT_ADDRESS, LOCAL_CHAIN_ID } from "../config";
 import "../App.css";
-
-const API = "http://localhost:5000";
 
 export default function VerifyReceipt() {
   const nav = useNavigate();
@@ -16,7 +14,6 @@ export default function VerifyReceipt() {
     typeof state?.chainRecorded === "boolean" ? state.chainRecorded : null;
 
   const session = getSession();
-  const token = session?.token || "";
   const matric = session?.user?.matric || "";
 
   const [hasWallet, setHasWallet] = useState(false);
@@ -80,8 +77,8 @@ export default function VerifyReceipt() {
     setChainOkRecorded(null);
 
     try {
-      const res = await fetch(`${API}/api/votes/mine`, {
-        headers: { Authorization: `Bearer ${token}` },
+      const res = await fetch(`${API_BASE_URL}/api/votes/mine`, {
+        credentials: "include",
       });
 
       // IMPORTANT: handle non-JSON responses safely
@@ -126,7 +123,7 @@ export default function VerifyReceipt() {
 
     try {
       // 1) DB verify
-      const res = await fetch(`${API}/api/verify/${encodeURIComponent(rid)}`);
+      const res = await fetch(`${API_BASE_URL}/api/verify/${encodeURIComponent(rid)}`);
 
       const ct = res.headers.get("content-type") || "";
       const raw = await res.text();

@@ -1,3 +1,5 @@
+import { API_BASE_URL } from "../config";
+
 // client/src/utils/auth.js
 const KEY = "bv_session_v1";
 
@@ -48,7 +50,7 @@ export function csrfHeaders() {
 
 export function clearSession() {
   localStorage.removeItem(KEY);
-  fetch("http://localhost:5000/api/auth/logout", {
+  fetch(`${API_BASE_URL}/api/auth/logout`, {
     method: "POST",
     credentials: "include",
   }).catch(() => {});

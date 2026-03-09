@@ -1,5 +1,6 @@
-﻿export const LOCAL_CHAIN_ID = 31337; // Hardhat local node
+export const LOCAL_CHAIN_ID = 31337; // Hardhat local node
 export const LOCAL_RPC_HINT = "http://127.0.0.1:8545";
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
 
 export const CONTRACT_ADDRESS = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
 
@@ -77,7 +78,7 @@ export const CONTRACT_ABI = [
     type: "function",
   },
 
-  // ✅ REQUIRED for verification
+  // ? REQUIRED for verification
   {
     inputs: [{ internalType: "bytes32", name: "receiptHash", type: "bytes32" }],
     name: "isReceiptRecorded",
@@ -111,3 +112,4 @@ export const CONTRACT_ABI = [
 
 
 ];
+

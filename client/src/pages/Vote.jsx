@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { CONTRACT_ADDRESS } from "../config";
+import { API_BASE_URL, CONTRACT_ADDRESS } from "../config";
 import { clearSession, csrfHeaders, getSession, isLoggedIn } from "../utils/auth";
 const EXPLORER_BASE = "";
 
@@ -43,7 +43,7 @@ export default function Vote() {
       setLoading(true);
 
       try {
-        const res = await fetch("http://localhost:5000/api/election/current", {
+        const res = await fetch(`${API_BASE_URL}/api/election/current`, {
           credentials: "include",
         });
 
@@ -117,7 +117,7 @@ export default function Vote() {
         candidateId: choices[p.id]
       }));
 
-      const res = await fetch("http://localhost:5000/api/votes/submit", {
+      const res = await fetch(`${API_BASE_URL}/api/votes/submit`, {
         method: "POST",
         credentials: "include",
         headers: {

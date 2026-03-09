@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { BrowserProvider, Contract } from "ethers";
 import { clearSession, getSession, isLoggedIn } from "../utils/auth";
-import { CONTRACT_ABI, CONTRACT_ADDRESS, LOCAL_CHAIN_ID } from "../config";
+import { CONTRACT_ABI, CONTRACT_ADDRESS, LOCAL_CHAIN_ID, API_BASE_URL } from "../config";
 import "../App.css";
 
 export default function Verify() {
@@ -59,7 +59,7 @@ export default function Verify() {
     setFound(null);
 
     try {
-      const res = await fetch("http://localhost:5000/api/votes/mine", {
+      const res = await fetch(`${API_BASE_URL}/api/votes/mine`, {
         credentials: "include",
       });
 
@@ -109,7 +109,7 @@ export default function Verify() {
     setFound(null);
 
     try {
-      const res = await fetch(`http://localhost:5000/api/verify/${encodeURIComponent(rid)}`);
+      const res = await fetch(`${API_BASE_URL}/api/verify/${encodeURIComponent(rid)}`);
       const data = await res.json();
 
       if (!data.found) {

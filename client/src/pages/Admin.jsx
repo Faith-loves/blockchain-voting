@@ -1,10 +1,11 @@
 import { useEffect,useState } from "react";
+import { API_BASE_URL } from "../config";
 
 export default function Admin(){
  const [votes,setVotes]=useState([]);
 
  useEffect(()=>{
-   fetch("http://localhost:5000/api/admin/results",{
+   fetch(`${API_BASE_URL}/api/admin/results`,{
      credentials:"include"
    })
    .then(r=>r.json())

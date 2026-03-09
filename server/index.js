@@ -8,6 +8,8 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const cookieParser = require("cookie-parser");
 const crypto = require("crypto");
+const fs = require("fs");
+const path = require("path");
 const rateLimit = require("express-rate-limit");
 const { z } = require("zod");
 const { nanoid } = require("nanoid");
@@ -40,6 +42,10 @@ app.use(
 );
 app.use(cookieParser());
 app.use(express.json());
+const clientDistPath = path.resolve(__dirname, "../client/dist");
+if (fs.existsSync(clientDistPath)) {
+  app.use(express.static(clientDistPath));
+}
 app.use((req, res, next) => {
   if (["GET", "HEAD", "OPTIONS"].includes(req.method)) return next();
 
@@ -380,6 +386,14 @@ app.post("/api/feedback", auth, async (req, res) => {
     res.status(500).json({ ok: false, message: "Feedback failed" });
   }
 });
+app.get("*", (req, res, next) => {
+  if (req.path.startsWith("/api/")) return next();
+  if (!fs.existsSync(clientDistPath)) return next();
+  return res.sendFile(path.join(clientDistPath, "index.html"), (err) => {
+    if (err) return next(err);
+  });
+});
+
 app.listen(PORT, () => console.log(`✅ Server running on http://localhost:${PORT}`));
 
 

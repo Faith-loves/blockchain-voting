@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { clearSession, getSession, isLoggedIn } from "../utils/auth";
+import { API_BASE_URL } from "../config";
 import "../App.css";
 
 export default function Dashboard() {
@@ -88,7 +89,7 @@ export default function Dashboard() {
       setLoading(true);
 
       try {
-        const res = await fetch("http://localhost:5000/api/election/current", {
+        const res = await fetch(`${API_BASE_URL}/api/election/current`, {
           credentials: "include",
         });
         const data = await res.json();

@@ -1,11 +1,10 @@
 // client/src/pages/AdminPanel.jsx
 import { useEffect, useMemo, useState } from "react";
 import { csrfHeaders, clearSession } from "../utils/auth";
-
-const API = "http://localhost:5000";
+import { API_BASE_URL } from "../config";
 
 async function apiFetch(path, { method = "GET", body } = {}) {
-  const res = await fetch(`${API}${path}`, {
+  const res = await fetch(`${API_BASE_URL}${path}`, {
     method,
     credentials: "include",
     headers: {
