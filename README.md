@@ -105,3 +105,59 @@ If `.git` already exists, skip `git init` and re-run from `git add` onward.
 - `client` currently expects API at `http://localhost:5000` by default (`client/.env.example` has `VITE_API_BASE_URL`).
 - Keep `.env` files out of source control (already ignored).
 - If someone else clones the repo, they should run `npm install` in each folder and follow this sequence.
+
+## For Evaluators (Quick Copy-Paste)
+
+This project is easiest to verify from a fresh clone using this exact order:
+
+```bash
+git clone https://github.com/Faith-loves/blockchain-voting.git
+cd blockchain-voting
+
+cp server/.env.example server/.env
+cp client/.env.example client/.env
+cp chain/.env.example chain/.env  # optional
+```
+
+```bash
+cd chain
+npm install
+npm run node
+```
+
+Open a second terminal:
+
+```bash
+cd chain
+npm run deploy
+```
+
+Copy the deployed contract address printed in deploy output to:
+
+- `server/.env` → `VOTING_CONTRACT_ADDRESS`
+- `client/src/config.ts` → `CONTRACT_ADDRESS`
+
+Open a third terminal:
+
+```bash
+cd server
+npm install
+npm run dev
+```
+
+Open a fourth terminal:
+
+```bash
+cd client
+npm install
+npm run dev
+```
+
+Then verify:
+
+1. Open `http://localhost:5173`
+2. Register a user
+3. Login
+4. Vote in an election
+5. Open the confirmation modal and click **Verify Now**
+6. On Verify page, connect MetaMask to **Localhost 8545** (chain `31337`) and click **Verify**
