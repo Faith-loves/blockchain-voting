@@ -29,6 +29,7 @@ const app = express();
 
 const isProd = process.env.NODE_ENV === "production";
 const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || "http://localhost:5173";
+const RENDER_URL = "https://blockchain-voting-ebop.onrender.com";
 const PORT = process.env.PORT || 5000;
 const MONGO_URI = process.env.MONGO_URI;
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -101,11 +102,19 @@ function issueAuthCookies(res, token) {
   return csrfToken;
 }
 
-app.use(helmet());
+// FIX 1: Disable Helmet's CSP — it intercepts Vite's hashed assets
+// and returns an HTML error page instead of the actual CSS/JS files,
+// causing the "MIME type text/html" white screen error.
+app.use(helmet({ contentSecurityPolicy: false }));
+
+// FIX 2: Allow both CLIENT_ORIGIN env var and the hardcoded Render URL
+// so assets are never CORS-blocked when CLIENT_ORIGIN isn't set on Render.
 app.use(
   cors({
     origin(origin, cb) {
-      if (!origin || origin === CLIENT_ORIGIN) return cb(null, true);
+      if (!origin) return cb(null, true);
+      if (origin === CLIENT_ORIGIN) return cb(null, true);
+      if (origin === RENDER_URL) return cb(null, true);
       return cb(new Error("CORS blocked"));
     },
     credentials: true,
