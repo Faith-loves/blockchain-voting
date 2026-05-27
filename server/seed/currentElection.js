@@ -1,7 +1,11 @@
 module.exports = {
   key: "current",
   title: "Institutional Election (Prototype)",
+  isCurrent: true,
   isActive: true,
+  startsAt: null,
+  endsAt: null,
+  archivedAt: null,
   positions: [
     {
       id: "pos-1",

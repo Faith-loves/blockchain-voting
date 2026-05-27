@@ -54,6 +54,29 @@ function getContract() {
   return new ethers.Contract(addr, ABI, wallet);
 }
 
+async function assertRpcAvailable(rpcUrl) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 2500);
+
+  try {
+    const res = await fetch(rpcUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "eth_chainId",
+        params: [],
+      }),
+      signal: controller.signal,
+    });
+
+    if (!res.ok) throw new Error(`RPC returned ${res.status}`);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 /**
  * Writes receiptHash to chain. Returns txHash + receiptHash.
  * Call inside try/catch. This function throws on:
@@ -63,6 +86,9 @@ function getContract() {
  * - contract missing recordReceipt(bytes32)
  */
 async function storeReceiptOnChain(receiptId, matric, electionKey) {
+  const rpcUrl = requireEnv("CHAIN_RPC_URL");
+  await assertRpcAvailable(rpcUrl);
+
   const contract = getContract();
   const receiptHash = makeHash(receiptId, matric, electionKey);
 

@@ -1,95 +1,73 @@
-// client/src/pages/AdminPanel.jsx
-import { useEffect, useMemo, useState } from "react";
-import { csrfHeaders, clearSession } from "../utils/auth";
+﻿import { useEffect, useMemo, useState } from "react";
 import { API_BASE_URL } from "../config";
+import { clearSession, csrfHeaders } from "../utils/auth";
 
 async function apiFetch(path, { method = "GET", body } = {}) {
   const res = await fetch(`${API_BASE_URL}${path}`, {
     method,
     credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      ...(!["GET", "HEAD", "OPTIONS"].includes(method) ? csrfHeaders() : {}),
-    },
+    headers: { "Content-Type": "application/json", ...(!["GET", "HEAD", "OPTIONS"].includes(method) ? csrfHeaders() : {}) },
     body: body ? JSON.stringify(body) : undefined,
   });
-
-  let data = null;
-  try {
-    data = await res.json();
-  } catch {
-    data = null;
-  }
-
-  return { ok: res.ok, status: res.status, data };
+  const type = res.headers.get("content-type") || "";
+  const data = type.includes("application/json") ? await res.json() : { message: await res.text() };
+  return { ok: res.ok, status: res.status, data, headers: res.headers };
 }
 
-function nowISO() {
-  return new Date().toISOString();
-}
-
-function safeClone(x) {
-  try {
-    return structuredClone(x);
-  } catch {
-    return JSON.parse(JSON.stringify(x));
-  }
-}
+const clone = (x) => { try { return structuredClone(x); } catch { return JSON.parse(JSON.stringify(x)); } };
+const toIso = (v) => (!v ? null : Number.isNaN(new Date(v).getTime()) ? null : new Date(v).toISOString());
+const formatInputDate = (v) => {
+  if (!v) return "";
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+const prettyDate = (v) => (!v ? "-" : Number.isNaN(new Date(v).getTime()) ? String(v) : new Date(v).toLocaleString());
+const saveBlob = (blob, filename) => {
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename || "download";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => window.URL.revokeObjectURL(url), 1000);
+};
 
 export default function AdminPanel() {
-  const [tab, setTab] = useState("overview"); // overview | manage | live | voters | feedback
+  const [tab, setTab] = useState("winners");
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
-
-  const [election, setElection] = useState(null);
-  const [alreadyVotedFlag, setAlreadyVotedFlag] = useState(false);
-
+  const [currentElection, setCurrentElection] = useState(null);
+  const [elections, setElections] = useState([]);
+  const [audits, setAudits] = useState([]);
   const [votes, setVotes] = useState([]);
   const [feedback, setFeedback] = useState([]);
-  const [polling, setPolling] = useState(true);
-
+  const [admins, setAdmins] = useState([]);
   const [draftPositions, setDraftPositions] = useState([]);
-
-  async function loadElection() {
-    const r = await apiFetch("/api/election/current");
-    if (!r.ok) throw new Error(r?.data?.message || `Election load failed (${r.status})`);
-
-    setElection(r.data.election);
-    setAlreadyVotedFlag(!!r.data.alreadyVoted);
-
-    // ✅ schema: positions[].name, candidates[].dept
-    setDraftPositions(safeClone(r.data.election?.positions || []));
-  }
-
-  async function loadVotes() {
-    const r = await apiFetch("/api/admin/results");
-
-    // Helpful error so you can see if it's 401/403/404 etc.
-    if (!r.ok) {
-      const m = r?.data?.message || `Votes load failed (${r.status})`;
-      throw new Error(m);
-    }
-
-    const arr = Array.isArray(r.data?.votes) ? r.data.votes : [];
-    setVotes(arr);
-
-    if (Array.isArray(r.data?.feedback)) {
-      setFeedback(r.data.feedback);
-      return;
-    }
-
-    const fallback = await apiFetch("/api/admin/feedback");
-    if (fallback.ok && Array.isArray(fallback.data?.feedback)) {
-      setFeedback(fallback.data.feedback);
-    }
-  }
+  const [schedule, setSchedule] = useState({ title: "", startsAt: "", endsAt: "", isActive: true, adminPassword: "" });
+  const [newElection, setNewElection] = useState({ title: "", startsAt: "", endsAt: "", isActive: true, adminPassword: "" });
+  const [adminForm, setAdminForm] = useState({ email: "", matric: "", password: "", adminPassword: "" });
+  const [restoreForm, setRestoreForm] = useState({ snapshotText: "", adminPassword: "" });
 
   async function refreshAll() {
-    setMsg("");
     setLoading(true);
+    setMsg("");
     try {
-      await loadElection();
-      await loadVotes();
+      const [resultsRes, electionsRes, adminsRes] = await Promise.all([apiFetch("/api/admin/results"), apiFetch("/api/admin/elections"), apiFetch("/api/admin/admins")]);
+      if (!resultsRes.ok) throw new Error(resultsRes.data?.message || `Results failed (${resultsRes.status})`);
+      if (!electionsRes.ok) throw new Error(electionsRes.data?.message || `Elections failed (${electionsRes.status})`);
+      if (!adminsRes.ok) throw new Error(adminsRes.data?.message || `Admins failed (${adminsRes.status})`);
+      const current = electionsRes.data?.currentElection || resultsRes.data?.election || null;
+      setCurrentElection(current);
+      setElections(Array.isArray(electionsRes.data?.elections) ? electionsRes.data.elections : []);
+      setAudits(Array.isArray(electionsRes.data?.audits) ? electionsRes.data.audits : []);
+      setVotes(Array.isArray(resultsRes.data?.votes) ? resultsRes.data.votes : []);
+      setFeedback(Array.isArray(resultsRes.data?.feedback) ? resultsRes.data.feedback : []);
+      setAdmins(Array.isArray(adminsRes.data?.admins) ? adminsRes.data.admins : []);
+      setDraftPositions(clone(current?.positions || []));
+      setSchedule((prev) => ({ ...prev, title: current?.title || "", startsAt: formatInputDate(current?.startsAt), endsAt: formatInputDate(current?.endsAt), isActive: !!current?.isActive }));
     } catch (e) {
       setMsg(String(e?.message || e));
     } finally {
@@ -97,767 +75,329 @@ export default function AdminPanel() {
     }
   }
 
-  useEffect(() => {
-    refreshAll();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  useEffect(() => { refreshAll(); }, []);
 
-  useEffect(() => {
-    if (!polling) return;
-    const id = setInterval(async () => {
-      try {
-        await loadVotes();
-      } catch {
-        // ignore polling errors
-      }
-    }, 2500);
-    return () => clearInterval(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [polling]);
+  const summary = useMemo(() => {
+    const tally = new Map();
+    for (const vote of votes) for (const selection of vote.selections || []) tally.set(`${selection.positionId}:${selection.candidateId}`, (tally.get(`${selection.positionId}:${selection.candidateId}`) || 0) + 1);
+    return (currentElection?.positions || []).map((position) => ({ ...position, candidates: (position.candidates || []).map((candidate) => ({ ...candidate, votes: tally.get(`${position.id}:${candidate.id}`) || 0 })).sort((a, b) => b.votes - a.votes) }));
+  }, [currentElection, votes]);
 
-  // pid -> cid -> count
-  const tally = useMemo(() => {
-    const t = new Map();
-    for (const v of votes || []) {
-      for (const s of v.selections || []) {
-        const pid = s.positionId;
-        const cid = s.candidateId;
-        if (!pid || !cid) continue;
-        if (!t.has(pid)) t.set(pid, new Map());
-        const inner = t.get(pid);
-        inner.set(cid, (inner.get(cid) || 0) + 1);
-      }
-    }
-    return t;
-  }, [votes]);
+  const overviewStats = [
+    { label: "Votes", value: votes.length, note: currentElection?.isActive ? "Active election traffic" : "Election currently disabled" },
+    { label: "Admins", value: admins.length, note: "Accounts with management access" },
+    { label: "Feedback", value: feedback.length, note: "Voter comments and issue reports" },
+    { label: "Archives", value: elections.filter((item) => item.archivedAt).length, note: "Historical election records" },
+  ];
 
-  // winners per position
-  const winners = useMemo(() => {
-    const out = [];
-    for (const p of election?.positions || []) {
-      const inner = tally.get(p.id) || new Map();
+  function patchPosition(id, patch) { setDraftPositions((prev) => prev.map((item) => (item.id === id ? { ...item, ...patch } : item))); }
+  function addPosition() { setDraftPositions((prev) => [...prev, { id: `pos-${Math.random().toString(16).slice(2, 8)}`, name: "New Position", candidates: [] }]); }
+  function removePosition(id) { setDraftPositions((prev) => prev.filter((item) => item.id !== id)); }
+  function addCandidate(positionId) { setDraftPositions((prev) => prev.map((item) => item.id !== positionId ? item : { ...item, candidates: [...(item.candidates || []), { id: `c-${Math.random().toString(16).slice(2, 8)}`, name: "Candidate Name", dept: "" }] })); }
+  function patchCandidate(positionId, candidateId, patch) { setDraftPositions((prev) => prev.map((item) => item.id !== positionId ? item : { ...item, candidates: (item.candidates || []).map((candidate) => (candidate.id === candidateId ? { ...candidate, ...patch } : candidate)) })); }
+  function removeCandidate(positionId, candidateId) { setDraftPositions((prev) => prev.map((item) => item.id !== positionId ? item : { ...item, candidates: (item.candidates || []).filter((candidate) => candidate.id !== candidateId) })); }
 
-      const leaderboard = (p.candidates || [])
-        .map((c) => ({ c, cnt: inner.get(c.id) || 0 }))
-        .sort((a, b) => b.cnt - a.cnt);
-
-      const top = leaderboard[0] || null;
-      const second = leaderboard[1] || null;
-
-      const topVotes = top?.cnt || 0;
-
-      // ✅ tie only matters if > 0 votes
-      const tie = !!(top && second && top.cnt === second.cnt && top.cnt > 0);
-
-      out.push({
-        positionId: p.id,
-        positionName: p.name || "Position",
-        top,
-        topVotes,
-        tie,
-        leaderboard,
-      });
-    }
-    return out;
-  }, [election, tally]);
-
-  // ✅ Overview cards (NO fake winners when votes=0)
-  const results = useMemo(() => {
-    return winners.map((w) => {
-      const winner = w.topVotes > 0 ? w.top?.c : null;
-
-      return {
-        positionId: w.positionId,
-        positionName: w.positionName,
-        tie: w.tie,
-        winnerName: winner ? winner.name : "No votes yet",
-        winnerDept: winner ? (winner.dept || "—") : "—",
-        winnerVotes: w.topVotes || 0,
-      };
-    });
-  }, [winners]);
-
-  // voters list
-  const voterRows = useMemo(() => {
-    const seen = new Set();
-    const rows = [];
-
-    for (const v of votes || []) {
-      const key = v.voterId || v.voterMatric || v._id;
-      if (seen.has(key)) continue;
-      seen.add(key);
-
-      rows.push({
-        voterId: v.voterId || "",
-        voterMatric: v.voterMatric || "",
-        receiptId: v.receiptId || "",
-        createdAt: v.createdAt || "",
-      });
-    }
-
-    rows.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
-    return rows;
-  }, [votes]);
-
-  const feedbackRows = useMemo(() => {
-    const rows = (feedback || []).map((f) => ({
-      id: f._id || `${f.voterMatric || ""}-${f.createdAt || ""}`,
-      voterMatric: f.voterMatric || "",
-      rating: Number(f.rating) || 0,
-      comment: f.comment || "",
-      issue: f.issue || "",
-      createdAt: f.createdAt || "",
-    }));
-
-    rows.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
-    return rows;
-  }, [feedback]);
-
-  // ----- Manage helpers -----
-  function addPosition() {
-    setDraftPositions((p) => [
-      ...p,
-      {
-        id: `pos-${Math.random().toString(16).slice(2, 8)}`,
-        name: "New Position",
-        candidates: [],
-      },
-    ]);
-  }
-
-  function removePosition(pid) {
-    setDraftPositions((p) => p.filter((x) => x.id !== pid));
-  }
-
-  function updatePosition(pid, patch) {
-    setDraftPositions((p) => p.map((x) => (x.id === pid ? { ...x, ...patch } : x)));
-  }
-
-  function addCandidate(pid) {
-    setDraftPositions((p) =>
-      p.map((pos) => {
-        if (pos.id !== pid) return pos;
-        const next = {
-          id: `c-${Math.random().toString(16).slice(2, 8)}`,
-          name: "Candidate Name",
-          dept: "",
-        };
-        return { ...pos, candidates: [...(pos.candidates || []), next] };
-      })
-    );
-  }
-
-  function removeCandidate(pid, cid) {
-    setDraftPositions((p) =>
-      p.map((pos) => {
-        if (pos.id !== pid) return pos;
-        return { ...pos, candidates: (pos.candidates || []).filter((c) => c.id !== cid) };
-      })
-    );
-  }
-
-  function updateCandidate(pid, cid, patch) {
-    setDraftPositions((p) =>
-      p.map((pos) => {
-        if (pos.id !== pid) return pos;
-        return {
-          ...pos,
-          candidates: (pos.candidates || []).map((c) => (c.id === cid ? { ...c, ...patch } : c)),
-        };
-      })
-    );
-  }
-
-  async function saveElectionDraft() {
-    setMsg("");
-    setLoading(true);
+  async function saveCurrentElection() {
+    setLoading(true); setMsg("");
     try {
-      const r = await apiFetch("/api/admin/election/current", {
-        method: "PUT",
-        body: { positions: draftPositions },
-      });
-
-      if (!r.ok) throw new Error(r?.data?.message || `Save failed (${r.status})`);
-
-      setMsg("✅ Saved.");
-      await refreshAll();
-    } catch (e) {
-      setMsg(String(e?.message || e));
-    } finally {
-      setLoading(false);
-    }
+      const res = await apiFetch("/api/admin/election/current", { method: "PUT", body: { title: schedule.title, startsAt: toIso(schedule.startsAt), endsAt: toIso(schedule.endsAt), isActive: schedule.isActive, positions: draftPositions, adminPassword: schedule.adminPassword } });
+      if (!res.ok) throw new Error(res.data?.message || `Save failed (${res.status})`);
+      setMsg("Current election updated."); setSchedule((prev) => ({ ...prev, adminPassword: "" })); await refreshAll();
+    } catch (e) { setMsg(String(e?.message || e)); } finally { setLoading(false); }
   }
 
-  const latestVoteAt = votes?.[0]?.createdAt || "";
+  async function toggleElection(isActive) {
+    setLoading(true); setMsg("");
+    try {
+      const res = await apiFetch("/api/admin/election/current/status", { method: "PATCH", body: { isActive, adminPassword: schedule.adminPassword } });
+      if (!res.ok) throw new Error(res.data?.message || `Status change failed (${res.status})`);
+      setMsg(isActive ? "Election enabled." : "Election disabled."); setSchedule((prev) => ({ ...prev, adminPassword: "" })); await refreshAll();
+    } catch (e) { setMsg(String(e?.message || e)); } finally { setLoading(false); }
+  }
+
+  async function archiveElection() {
+    setLoading(true); setMsg("");
+    try {
+      const res = await apiFetch("/api/admin/election/current/archive", { method: "POST", body: { adminPassword: schedule.adminPassword } });
+      if (!res.ok) throw new Error(res.data?.message || `Archive failed (${res.status})`);
+      setMsg("Current election archived."); setSchedule((prev) => ({ ...prev, adminPassword: "" })); await refreshAll();
+    } catch (e) { setMsg(String(e?.message || e)); } finally { setLoading(false); }
+  }
+
+  async function createElection() {
+    setLoading(true); setMsg("");
+    try {
+      const res = await apiFetch("/api/admin/elections", { method: "POST", body: { title: newElection.title, startsAt: toIso(newElection.startsAt), endsAt: toIso(newElection.endsAt), isActive: newElection.isActive, positions: draftPositions, adminPassword: newElection.adminPassword } });
+      if (!res.ok) throw new Error(res.data?.message || `Create failed (${res.status})`);
+      setMsg("New election created and set as current."); setNewElection({ title: "", startsAt: "", endsAt: "", isActive: true, adminPassword: "" }); await refreshAll();
+    } catch (e) { setMsg(String(e?.message || e)); } finally { setLoading(false); }
+  }
+
+  async function submitAdmin(e) {
+    e.preventDefault(); setLoading(true); setMsg("");
+    try {
+      const res = await apiFetch("/api/admin/admins", { method: "POST", body: { email: adminForm.email.trim().toLowerCase(), matric: adminForm.matric.trim().toUpperCase(), password: adminForm.password, adminPassword: adminForm.adminPassword } });
+      if (!res.ok) throw new Error(res.data?.message || `Admin creation failed (${res.status})`);
+      setMsg("Admin created."); setAdminForm({ email: "", matric: "", password: "", adminPassword: "" }); await refreshAll();
+    } catch (e) { setMsg(String(e?.message || e)); } finally { setLoading(false); }
+  }
+
+  async function removeAdmin(adminId) {
+    if (!window.confirm("Remove this admin?")) return;
+    setLoading(true); setMsg("");
+    try {
+      const res = await apiFetch(`/api/admin/admins/${adminId}`, { method: "DELETE", body: { adminPassword: adminForm.adminPassword } });
+      if (!res.ok) throw new Error(res.data?.message || `Remove failed (${res.status})`);
+      setMsg("Admin removed."); await refreshAll();
+    } catch (e) { setMsg(String(e?.message || e)); } finally { setLoading(false); }
+  }
+
+  async function download(path, fallbackName) {
+    setLoading(true); setMsg("");
+    try {
+      const res = await fetch(`${API_BASE_URL}${path}`, { credentials: "include" });
+      if (!res.ok) throw new Error(await res.text());
+      const blob = await res.blob();
+      const disposition = res.headers.get("content-disposition") || "";
+      const filename = disposition.match(/filename="([^"]+)"/)?.[1] || fallbackName;
+      saveBlob(blob, filename);
+      setMsg(`${filename} downloaded.`);
+    } catch (e) { setMsg(String(e?.message || e)); } finally { setLoading(false); }
+  }
+
+  async function restoreBackup() {
+    setLoading(true); setMsg("");
+    try {
+      const snapshot = JSON.parse(restoreForm.snapshotText || "{}");
+      const res = await apiFetch("/api/admin/backup/restore", { method: "POST", body: { snapshot, adminPassword: restoreForm.adminPassword } });
+      if (!res.ok) throw new Error(res.data?.message || `Restore failed (${res.status})`);
+      setMsg("Backup restore finished in merge mode."); setRestoreForm({ snapshotText: "", adminPassword: "" }); await refreshAll();
+    } catch (e) { setMsg(String(e?.message || e)); } finally { setLoading(false); }
+  }
 
   return (
     <div style={styles.page}>
       <div style={styles.topbar}>
-        <div style={{ display: "flex", flexDirection: "column" }}>
-          <div style={styles.title}>Admin Panel</div>
-          <div style={styles.sub}>
-            {election?.title || "Current election"} • {votes.length} votes • {nowISO()}
-          </div>
+        <div>
+          <div style={styles.title}>Admin Control Center</div>
+          <div style={styles.sub}>{currentElection?.title || "No current election"} | {votes.length} votes | {admins.length} admins</div>
         </div>
-
-        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-          <label style={styles.toggle}>
-            <input type="checkbox" checked={polling} onChange={(e) => setPolling(e.target.checked)} />
-            <span style={{ marginLeft: 8 }}>Live</span>
-          </label>
-
-          <button style={styles.btn} onClick={refreshAll} disabled={loading}>
-            {loading ? "Refreshing…" : "Refresh"}
-          </button>
-
-          <button
-            style={{ ...styles.btn, background: "rgba(255,255,255,.06)" }}
-            onClick={() => {
-              clearSession();
-              window.location.href = "/login";
-            }}
-          >
-            Logout
-          </button>
+        <div style={styles.row}>
+          <button style={styles.btn} onClick={refreshAll} disabled={loading}>{loading ? "Refreshing..." : "Refresh"}</button>
+          <button style={styles.btn} onClick={() => { clearSession(); window.location.href = "/login"; }}>Logout</button>
         </div>
       </div>
 
-      <div style={styles.wrap}>
-        <aside style={styles.side}>
-          <NavItem label="Overview" active={tab === "overview"} onClick={() => setTab("overview")} />
-          <NavItem label="Manage Election" active={tab === "manage"} onClick={() => setTab("manage")} />
-          <NavItem label="Live Results" active={tab === "live"} onClick={() => setTab("live")} />
-          <NavItem label="Voters" active={tab === "voters"} onClick={() => setTab("voters")} />
-          <NavItem label="Feedback" active={tab === "feedback"} onClick={() => setTab("feedback")} />
-
-          <div style={styles.sideMeta}>
-            <div style={styles.metaLine}>
-              <span style={styles.dot(election?.isActive ? "#27c93f" : "#ffbd2e")} />
-              <span>{election?.isActive ? "Election active" : "Election inactive"}</span>
-            </div>
-            <div style={styles.metaLine}>
-              <span style={styles.dot(alreadyVotedFlag ? "#ff5f57" : "#7aa2ff")} />
-              <span>{alreadyVotedFlag ? "You already voted (admin session)" : "Admin session OK"}</span>
-            </div>
-          </div>
+      <div style={styles.layout}>
+        <aside style={styles.sidebar}>
+          {["winners", "overview", "manage", "schedule", "admins", "history", "tools"].map((value) => (
+            <button key={value} style={{ ...styles.nav, ...(tab === value ? styles.navActive : null) }} onClick={() => setTab(value)}>
+              {value === "winners" ? "Winners" : value === "overview" ? "Overview" : value === "manage" ? "Manage Ballot" : value.charAt(0).toUpperCase() + value.slice(1)}
+            </button>
+          ))}
         </aside>
 
         <main style={styles.main}>
-          {msg ? <div style={styles.msg}>{msg}</div> : null}
+          {msg ? <div style={styles.message}>{msg}</div> : null}
 
-          {tab === "overview" && (
-            <section style={styles.card}>
-              <h2 style={styles.h2}>Winners (current)</h2>
-
-              {/* ✅ diagnostics to prove whether server is returning votes */}
-              <div style={{ ...styles.msg, marginTop: 12 }}>
-                <b>Diagnostics:</b> votes from API = <b>{votes.length}</b>
-                {latestVoteAt ? (
-                  <>
-                    {" "}
-                    • latest vote at <span style={{ opacity: 0.9 }}>{latestVoteAt}</span>
-                  </>
-                ) : null}
-              </div>
-
-              <div style={styles.grid2}>
-                {results.map((pos) => (
-                  <div key={pos.positionId} style={styles.winnerCard}>
-                    <div style={styles.winnerTitle}>🏆 {pos.positionName}</div>
-
-                    <div style={styles.winnerBox}>
-                      <div style={styles.winnerName}>{pos.winnerName}</div>
-                      <div style={styles.winnerDept}>{pos.winnerDept}</div>
-                      <div style={styles.winnerVotes}>{pos.winnerVotes} votes</div>
-                      {pos.tie ? <div style={styles.tieTag}>Tie detected</div> : null}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {results.length === 0 ? <div style={styles.emptyRow}>No positions found.</div> : null}
-            </section>
-          )}
-
-          {tab === "manage" && (
-            <section style={styles.card}>
-              <div style={styles.rowBetween}>
-                <h2 style={styles.h2}>Manage Positions & Candidates</h2>
-                <div style={{ display: "flex", gap: 10 }}>
-                  <button style={styles.btn} onClick={addPosition}>
-                    + Add position
-                  </button>
-                  <button style={styles.btnPrimary} onClick={saveElectionDraft} disabled={loading}>
-                    Save changes
-                  </button>
+          {tab === "winners" && <section style={styles.card}>
+            <div style={styles.winnersHero}>
+              <div style={styles.winnersGlowA} />
+              <div style={styles.winnersGlowB} />
+              <div style={styles.winnersHeroContent}>
+                <div style={styles.winnersEyebrow}>Election Results</div>
+                <h2 style={styles.winnersTitle}>Winners Gallery</h2>
+                <div style={styles.winnersCopy}>
+                  A more polished presentation of the current winning candidates across every position in the election.
+                </div>
+                <div style={styles.winnersMetaRow}>
+                  <div style={styles.winnersMetaPill}>{currentElection?.title || "No current election"}</div>
+                  <div style={styles.winnersMetaPill}>{summary.length} positions</div>
+                  <div style={styles.winnersMetaPill}>{votes.length} votes recorded</div>
+                  <div style={styles.winnersMetaPill}>{currentElection?.isActive ? "Live results" : "Final results"}</div>
                 </div>
               </div>
+            </div>
 
-              <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 12 }}>
-                {draftPositions.map((pos) => (
-                  <div key={pos.id} style={styles.block}>
-                    <div style={styles.rowBetween}>
-                      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                        <div style={styles.pill}>Position ID: {pos.id}</div>
-                        <input
-                          style={styles.input}
-                          value={pos.name || ""}
-                          onChange={(e) => updatePosition(pos.id, { name: e.target.value })}
-                        />
-                      </div>
-
-                      <div style={{ display: "flex", gap: 10 }}>
-                        <button style={styles.btn} onClick={() => addCandidate(pos.id)}>
-                          + Candidate
-                        </button>
-                        <button
-                          style={{ ...styles.btn, background: "rgba(255,0,0,.15)" }}
-                          onClick={() => removePosition(pos.id)}
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    </div>
-
-                    <div style={styles.table}>
-                      <div style={styles.trHeadManage}>
-                        <div style={styles.th}>Candidate ID</div>
-                        <div style={styles.th}>Name</div>
-                        <div style={styles.th}>Department</div>
-                        <div style={styles.th}>Action</div>
-                      </div>
-
-                      {(pos.candidates || []).map((c) => (
-                        <div key={c.id} style={styles.trManage}>
-                          <div style={styles.tdMono}>{c.id}</div>
-
-                          <div style={styles.td}>
-                            <input
-                              style={styles.inputSmall}
-                              value={c.name || ""}
-                              onChange={(e) => updateCandidate(pos.id, c.id, { name: e.target.value })}
-                            />
-                          </div>
-
-                          <div style={styles.td}>
-                            <input
-                              style={styles.inputSmall}
-                              value={c.dept || ""}
-                              onChange={(e) => updateCandidate(pos.id, c.id, { dept: e.target.value })}
-                            />
-                          </div>
-
-                          <div style={styles.td}>
-                            <button
-                              style={{ ...styles.btn, background: "rgba(255,0,0,.15)" }}
-                              onClick={() => removeCandidate(pos.id, c.id)}
-                            >
-                              Delete
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-
-                      {(pos.candidates || []).length === 0 ? (
-                        <div style={styles.emptyRow}>No candidates yet.</div>
-                      ) : null}
-                    </div>
-                  </div>
-                ))}
-
-                {draftPositions.length === 0 ? <div style={styles.emptyBig}>No positions in this election.</div> : null}
-              </div>
-            </section>
-          )}
-
-          {tab === "live" && (
-            <section style={styles.card}>
-              <div style={styles.rowBetween}>
-                <h2 style={styles.h2}>Live Results</h2>
-                <div style={styles.pill}>Auto refresh: {polling ? "ON" : "OFF"}</div>
-              </div>
-
-              {(election?.positions || []).map((p) => {
-                const inner = tally.get(p.id) || new Map();
-                const rows = (p.candidates || [])
-                  .map((c) => ({ c, cnt: inner.get(c.id) || 0 }))
-                  .sort((a, b) => b.cnt - a.cnt);
-
-                const totalVotes = rows.reduce((s, r) => s + r.cnt, 0);
+            <div style={styles.winnersGrid}>
+              {summary.map((position) => {
+                const winner = position.candidates?.[0] || null;
+                const second = position.candidates?.[1] || null;
+                const tie = winner && second && winner.votes === second.votes && winner.votes > 0;
+                const winners = tie ? [winner, second] : winner ? [winner] : [];
+                const initials = winners[0]?.name
+                  ? winners[0].name
+                      .split(" ")
+                      .slice(0, 2)
+                      .map((part) => part[0])
+                      .join("")
+                      .toUpperCase()
+                  : "--";
 
                 return (
-                  <div key={p.id} style={styles.block}>
-                    <div style={styles.rowBetween}>
-                      <div style={styles.blockTitle}>{p.name}</div>
-                      <div style={styles.pill}>Position ID: {p.id}</div>
+                  <div key={position.id} style={styles.winnerShowcase}>
+                    <div style={styles.winnerAccent} />
+                    <div style={styles.winnerTopRow}>
+                      <div style={styles.winnerAvatar}>{initials}</div>
+                      <div style={styles.winnerIcon}>{"\uD83C\uDFC6"}</div>
                     </div>
-
-                    <div style={styles.table}>
-                      <div style={styles.trHeadLive}>
-                        <div style={styles.th}>Candidate</div>
-                        <div style={styles.th}>Department</div>
-                        <div style={styles.th}>Votes</div>
-                        <div style={styles.th}>%</div>
-                      </div>
-
-                      {rows.map(({ c, cnt }) => {
-                        const pct = totalVotes ? Math.round((cnt / totalVotes) * 100) : 0;
-                        return (
-                          <div key={c.id} style={styles.trLive}>
-                            <div style={styles.td}>{c.name}</div>
-                            <div style={styles.td}>{c.dept || "—"}</div>
-                            <div style={styles.tdMono}>{cnt}</div>
-                            <div style={styles.td}>
-                              <div style={styles.barWrap}>
-                                <div style={{ ...styles.bar, width: `${pct}%` }} />
-                                <span style={styles.barText}>{pct}%</span>
-                              </div>
-                            </div>
+                    <div style={styles.winnerPosition}>{position.name}</div>
+                    {winners.length ? (
+                      <div style={styles.winnerList}>
+                        {winners.map((candidate) => (
+                          <div key={`${position.id}-${candidate.id || candidate.name}`} style={styles.winnerEntry}>
+                            <div style={styles.winnerPerson}>{candidate?.name || "No winner yet"}</div>
+                            <div style={styles.winnerDepartment}>{candidate?.dept || "Department not provided"}</div>
                           </div>
-                        );
-                      })}
-
-                      {rows.length === 0 ? <div style={styles.emptyRow}>No candidates.</div> : null}
-                    </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div style={styles.winnerList}>
+                        <div style={styles.winnerEntry}>
+                          <div style={styles.winnerPerson}>No winner yet</div>
+                          <div style={styles.winnerDepartment}>No votes recorded for this position</div>
+                        </div>
+                      </div>
+                    )}
+                    <div style={styles.winnerVoteTag}>{winner?.votes ? `${winner.votes} votes` : "No votes yet"}</div>
+                    {tie ? <div style={styles.tieBadge}>Joint winners</div> : <div style={styles.winnerCrown}>Winner</div>}
                   </div>
                 );
               })}
-            </section>
-          )}
+            </div>
+          </section>}
 
-          {tab === "voters" && (
-            <section style={styles.card}>
-              <div style={styles.rowBetween}>
-                <h2 style={styles.h2}>Voters</h2>
-                <div style={styles.pill}>{voterRows.length} unique voters</div>
+          {tab === "overview" && <section style={styles.card}>
+            <div style={styles.rowBetween}>
+              <div>
+                <h2 style={styles.h2}>Executive Overview</h2>
+                <div style={styles.sectionSub}>A formal summary of election performance and the new admin tools now available.</div>
               </div>
-
-              <div style={styles.table}>
-                <div style={styles.trHeadVoters}>
-                  <div style={styles.th}>Matric</div>
-                  <div style={styles.th}>Receipt</div>
-                  <div style={styles.th}>Time</div>
-                </div>
-
-                {voterRows.map((r) => (
-                  <div key={r.voterId || r.voterMatric || r.receiptId} style={styles.trVoters}>
-                    <div style={styles.tdMono}>{r.voterMatric || "—"}</div>
-                    <div style={styles.tdMono}>{r.receiptId || "—"}</div>
-                    <div style={styles.td}>{r.createdAt || "—"}</div>
-                  </div>
-                ))}
-
-                {voterRows.length === 0 ? <div style={styles.emptyRow}>No votes yet.</div> : null}
+              <div style={styles.statusWrap}>
+                <div style={{ ...styles.statusChip, ...(currentElection?.isActive ? styles.statusLive : styles.statusIdle) }}>{currentElection?.isActive ? "Election Active" : "Election Disabled"}</div>
+                <div style={styles.pill}>{currentElection?.title || "No current election"}</div>
               </div>
-            </section>
-          )}
-
-          {tab === "feedback" && (
-            <section style={styles.card}>
-              <div style={styles.rowBetween}>
-                <h2 style={styles.h2}>Customer Feedback</h2>
-                <div style={styles.pill}>{feedbackRows.length} submissions</div>
+            </div>
+            <div style={styles.metricsGrid}>{overviewStats.map((item) => <div key={item.label} style={styles.metricCard}><div style={styles.metricLabel}>{item.label}</div><div style={styles.metricValue}>{item.value}</div><div style={styles.metricNote}>{item.note}</div></div>)}</div>
+            <div style={styles.grid}>
+              <div style={styles.heroPanel}>
+                <div style={styles.heroTitle}>Current Election Window</div>
+                <div style={styles.timelineRow}><span>Starts</span><strong>{prettyDate(currentElection?.startsAt)}</strong></div>
+                <div style={styles.timelineRow}><span>Ends</span><strong>{prettyDate(currentElection?.endsAt)}</strong></div>
+                <div style={styles.timelineRow}><span>Positions</span><strong>{summary.length}</strong></div>
+                <div style={styles.timelineRow}><span>Latest Audit</span><strong>{audits[0] ? prettyDate(audits[0].createdAt) : "No activity yet"}</strong></div>
               </div>
-
-              <div style={styles.table}>
-                <div style={styles.trHeadFeedback}>
-                  <div style={styles.th}>Matric</div>
-                  <div style={styles.th}>Rating</div>
-                  <div style={styles.th}>Comment</div>
-                  <div style={styles.th}>Issue</div>
-                  <div style={styles.th}>Time</div>
-                </div>
-
-                {feedbackRows.map((r) => (
-                  <div key={r.id} style={styles.trFeedback}>
-                    <div style={styles.tdMono}>{r.voterMatric || "—"}</div>
-                    <div style={styles.td}>{r.rating ? `${r.rating}/5` : "—"}</div>
-                    <div style={styles.td}>{r.comment || "—"}</div>
-                    <div style={styles.td}>{r.issue || "—"}</div>
-                    <div style={styles.td}>{r.createdAt || "—"}</div>
-                  </div>
-                ))}
-
-                {feedbackRows.length === 0 ? <div style={styles.emptyRow}>No feedback yet.</div> : null}
+              <div style={styles.block}>
+                <div style={styles.blockTitle}>Quick Access</div>
+                {[
+                  ["schedule", "Election Schedule", "Set start and end time, enable, disable, or archive the election."],
+                  ["admins", "Admin Management", "Create and remove admin accounts from one place."],
+                  ["tools", "Reports and Backup", "Download reports, audit files, backups, and restore data."],
+                  ["history", "Election History", "Review archived elections and audit activity."],
+                ].map(([nextTab, title, note]) => <button key={title} style={styles.quickAction} onClick={() => setTab(nextTab)}><span><strong>{title}</strong><span style={styles.quickNote}>{note}</span></span><span>Open</span></button>)}
               </div>
-            </section>
-          )}
+            </div>
+            <div style={styles.grid}>
+              <div style={styles.block}>
+                <div style={styles.blockTitle}>New Features Included</div>
+                {[
+                  "Admin creation and removal controls",
+                  "Election scheduling, enable, disable, and archive actions",
+                  "Create a new election from the current ballot structure",
+                  "Forgot-password and reset-password flow from login",
+                  "Audit export, election report download, backup export, and restore",
+                  "Election history and archive tracking",
+                ].map((item) => <div key={item} style={styles.featureItem}>{item}</div>)}
+              </div>
+              <div style={styles.block}>
+                <div style={styles.blockTitle}>Recent Audit</div>
+                {audits.slice(0, 6).map((audit) => <div key={`${audit._id}-${audit.createdAt}`} style={styles.auditLine}><strong>{audit.action}</strong><div style={styles.smallText}>{audit.adminMatric || "-"} | {prettyDate(audit.createdAt)}</div></div>)}
+              </div>
+            </div>
+            <div style={styles.stack}>{summary.map((position) => <div key={position.id} style={styles.block}><div style={styles.rowBetween}><div><div style={styles.blockTitle}>{position.name}</div><div style={styles.smallText}>Position ID: {position.id}</div></div><div style={styles.pill}>{position.candidates?.[0]?.votes > 0 ? `${position.candidates[0].votes} leading votes` : "No votes yet"}</div></div>{(position.candidates || []).map((candidate) => <div key={candidate.id} style={styles.resultRow}><span>{candidate.name}</span><span>{candidate.dept || "-"}</span><span>{candidate.votes} vote(s)</span></div>)}</div>)}</div>
+          </section>}
 
-          <div style={styles.footer}>
-            Admin routes must be protected by role check (server) + RequireAdmin (frontend).
-          </div>
+          {tab === "manage" && <section style={styles.card}><div style={styles.rowBetween}><h2 style={styles.h2}>Manage Ballot</h2><div style={styles.row}><button style={styles.btn} onClick={addPosition}>Add Position</button><button style={styles.primaryBtn} onClick={saveCurrentElection} disabled={loading}>Save Current Election</button></div></div>{draftPositions.map((position) => <div key={position.id} style={{ ...styles.block, marginTop: 12 }}><div style={styles.rowBetween}><div style={styles.row}><div style={styles.pill}>{position.id}</div><input style={styles.input} value={position.name || ""} onChange={(e) => patchPosition(position.id, { name: e.target.value })} /></div><div style={styles.row}><button style={styles.btn} onClick={() => addCandidate(position.id)}>Add Candidate</button><button style={styles.dangerBtn} onClick={() => removePosition(position.id)}>Remove Position</button></div></div>{(position.candidates || []).map((candidate) => <div key={candidate.id} style={styles.candidateRow}><div style={styles.smallText}>{candidate.id}</div><input style={styles.input} value={candidate.name || ""} onChange={(e) => patchCandidate(position.id, candidate.id, { name: e.target.value })} /><input style={styles.input} value={candidate.dept || ""} onChange={(e) => patchCandidate(position.id, candidate.id, { dept: e.target.value })} /><button style={styles.dangerBtn} onClick={() => removeCandidate(position.id, candidate.id)}>Delete</button></div>)}</div>)}</section>}
+
+          {tab === "schedule" && <section style={styles.card}><h2 style={styles.h2}>Election Schedule</h2><div style={styles.grid}><div style={styles.block}><div style={styles.blockTitle}>Current Election</div><div style={styles.form}><input style={styles.input} placeholder="Title" value={schedule.title} onChange={(e) => setSchedule((prev) => ({ ...prev, title: e.target.value }))} /><input style={styles.input} type="datetime-local" value={schedule.startsAt} onChange={(e) => setSchedule((prev) => ({ ...prev, startsAt: e.target.value }))} /><input style={styles.input} type="datetime-local" value={schedule.endsAt} onChange={(e) => setSchedule((prev) => ({ ...prev, endsAt: e.target.value }))} /><label style={styles.checkbox}><input type="checkbox" checked={schedule.isActive} onChange={(e) => setSchedule((prev) => ({ ...prev, isActive: e.target.checked }))} /> Election enabled</label><input style={styles.input} type="password" placeholder="Admin password if reauth is enabled" value={schedule.adminPassword} onChange={(e) => setSchedule((prev) => ({ ...prev, adminPassword: e.target.value }))} /><div style={styles.row}><button style={styles.primaryBtn} onClick={saveCurrentElection}>Save Schedule</button><button style={styles.btn} onClick={() => toggleElection(!schedule.isActive)}>{schedule.isActive ? "Disable" : "Enable"}</button><button style={styles.dangerBtn} onClick={archiveElection}>Archive</button></div></div></div><div style={styles.block}><div style={styles.blockTitle}>Create New Election</div><div style={styles.form}><input style={styles.input} placeholder="New election title" value={newElection.title} onChange={(e) => setNewElection((prev) => ({ ...prev, title: e.target.value }))} /><input style={styles.input} type="datetime-local" value={newElection.startsAt} onChange={(e) => setNewElection((prev) => ({ ...prev, startsAt: e.target.value }))} /><input style={styles.input} type="datetime-local" value={newElection.endsAt} onChange={(e) => setNewElection((prev) => ({ ...prev, endsAt: e.target.value }))} /><label style={styles.checkbox}><input type="checkbox" checked={newElection.isActive} onChange={(e) => setNewElection((prev) => ({ ...prev, isActive: e.target.checked }))} /> Activate immediately</label><input style={styles.input} type="password" placeholder="Admin password if reauth is enabled" value={newElection.adminPassword} onChange={(e) => setNewElection((prev) => ({ ...prev, adminPassword: e.target.value }))} /><div style={styles.smallText}>The new election will reuse the ballot draft from the Manage Ballot tab.</div><button style={styles.primaryBtn} onClick={createElection}>Create New Election</button></div></div></div></section>}
+
+          {tab === "admins" && <section style={styles.card}><div style={styles.grid}><form style={styles.block} onSubmit={submitAdmin}><div style={styles.blockTitle}>Add Admin</div><div style={styles.form}><input style={styles.input} placeholder="Admin email" value={adminForm.email} onChange={(e) => setAdminForm((prev) => ({ ...prev, email: e.target.value }))} /><input style={styles.input} placeholder="Admin matric" value={adminForm.matric} onChange={(e) => setAdminForm((prev) => ({ ...prev, matric: e.target.value }))} /><input style={styles.input} type="password" placeholder="Temporary password" value={adminForm.password} onChange={(e) => setAdminForm((prev) => ({ ...prev, password: e.target.value }))} /><input style={styles.input} type="password" placeholder="Admin password if reauth is enabled" value={adminForm.adminPassword} onChange={(e) => setAdminForm((prev) => ({ ...prev, adminPassword: e.target.value }))} /><button type="submit" style={styles.primaryBtn}>Create Admin</button></div></form><div style={styles.block}><div style={styles.blockTitle}>Existing Admins</div>{admins.map((admin) => <div key={admin._id || admin.id} style={styles.candidateRow}><div>{admin.email}</div><div>{admin.matric}</div><div>{prettyDate(admin.createdAt)}</div><button style={styles.dangerBtn} onClick={() => removeAdmin(admin._id || admin.id)}>Remove</button></div>)}</div></div></section>}
+
+          {tab === "history" && <section style={styles.card}><h2 style={styles.h2}>Election History</h2>{elections.map((election) => <div key={election.key} style={styles.block}><div style={styles.rowBetween}><div><div style={styles.blockTitle}>{election.title}</div><div style={styles.smallText}>{election.key}</div></div><div style={styles.pill}>{election.isCurrent ? "Current" : election.isActive ? "Active" : "Inactive"}</div></div><div style={styles.line}>Window: {prettyDate(election.startsAt)} - {prettyDate(election.endsAt)}</div><div style={styles.line}>Archived: {prettyDate(election.archivedAt)}</div></div>)}</section>}
+
+          {tab === "tools" && <section style={styles.card}><div style={styles.grid}><div style={styles.block}><div style={styles.blockTitle}>Downloads</div><div style={styles.form}><button style={styles.btn} onClick={() => download("/api/admin/report/export", "election-report.csv")}>Download Election Report</button><button style={styles.btn} onClick={() => download("/api/admin/audit/export", "admin-audit.csv")}>Download Audit CSV</button><button style={styles.btn} onClick={() => download("/api/admin/backup/export", "backup.json")}>Download Backup JSON</button></div></div><div style={styles.block}><div style={styles.blockTitle}>Restore Backup</div><div style={styles.form}><textarea style={styles.textarea} placeholder="Paste backup JSON here" value={restoreForm.snapshotText} onChange={(e) => setRestoreForm((prev) => ({ ...prev, snapshotText: e.target.value }))} /><input style={styles.input} type="password" placeholder="Admin password if reauth is enabled" value={restoreForm.adminPassword} onChange={(e) => setRestoreForm((prev) => ({ ...prev, adminPassword: e.target.value }))} /><div style={styles.smallText}>Restore uses merge mode. Existing records are kept.</div><button style={styles.primaryBtn} onClick={restoreBackup}>Restore Backup</button></div></div></div></section>}
         </main>
       </div>
     </div>
   );
 }
 
-function NavItem({ label, active, onClick }) {
-  return (
-    <button
-      onClick={onClick}
-      style={{
-        ...styles.navItem,
-        ...(active ? styles.navItemActive : null),
-      }}
-    >
-      {label}
-    </button>
-  );
-}
-
 const styles = {
-  page: {
-    minHeight: "100vh",
-    background:
-      "radial-gradient(1000px 600px at 20% 10%, rgba(90,140,255,.18), transparent 55%), radial-gradient(1000px 600px at 80% 30%, rgba(180,90,255,.12), transparent 55%), #060912",
-    color: "rgba(255,255,255,.92)",
-    fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
-  },
-  topbar: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: "16px 18px",
-    borderBottom: "1px solid rgba(255,255,255,.08)",
-    position: "sticky",
-    top: 0,
-    backdropFilter: "blur(8px)",
-    background: "rgba(6,9,18,.65)",
-    zIndex: 10,
-  },
-  title: { fontSize: 20, fontWeight: 800, letterSpacing: 0.2 },
-  sub: { fontSize: 12, opacity: 0.75, marginTop: 2 },
-
-  wrap: { display: "grid", gridTemplateColumns: "260px 1fr", gap: 14, padding: 14 },
-  side: {
-    border: "1px solid rgba(255,255,255,.08)",
-    borderRadius: 16,
-    padding: 12,
-    background: "rgba(255,255,255,.03)",
-    height: "fit-content",
-  },
-  main: { display: "flex", flexDirection: "column", gap: 14 },
-
-  navItem: {
-    width: "100%",
-    textAlign: "left",
-    padding: "10px 10px",
-    borderRadius: 12,
-    border: "1px solid rgba(255,255,255,.08)",
-    background: "rgba(255,255,255,.02)",
-    color: "rgba(255,255,255,.9)",
-    cursor: "pointer",
-    marginBottom: 8,
-    fontWeight: 700,
-  },
-  navItemActive: {
-    background: "rgba(120,160,255,.14)",
-    border: "1px solid rgba(120,160,255,.25)",
-  },
-
-  sideMeta: { marginTop: 12, paddingTop: 10, borderTop: "1px solid rgba(255,255,255,.08)" },
-  metaLine: { display: "flex", gap: 10, alignItems: "center", fontSize: 12, opacity: 0.85, marginTop: 8 },
-  dot: (c) => ({
-    width: 10,
-    height: 10,
-    borderRadius: 99,
-    background: c,
-    boxShadow: `0 0 0 3px rgba(255,255,255,.06)`,
-  }),
-
-  card: {
-    border: "1px solid rgba(255,255,255,.08)",
-    borderRadius: 16,
-    padding: 14,
-    background: "rgba(255,255,255,.03)",
-  },
-  h2: { margin: 0, fontSize: 16, fontWeight: 900 },
-  msg: {
-    border: "1px solid rgba(255,255,255,.1)",
-    background: "rgba(255,255,255,.04)",
-    borderRadius: 14,
-    padding: 10,
-    fontSize: 13,
-    opacity: 0.95,
-  },
-  rowBetween: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" },
-
-  btn: {
-    padding: "10px 12px",
-    borderRadius: 12,
-    border: "1px solid rgba(255,255,255,.12)",
-    background: "rgba(255,255,255,.05)",
-    color: "rgba(255,255,255,.92)",
-    cursor: "pointer",
-    fontWeight: 800,
-  },
-  btnPrimary: {
-    padding: "10px 12px",
-    borderRadius: 12,
-    border: "1px solid rgba(130,170,255,.35)",
-    background: "rgba(130,170,255,.18)",
-    color: "rgba(255,255,255,.96)",
-    cursor: "pointer",
-    fontWeight: 900,
-  },
-  toggle: { display: "flex", alignItems: "center", fontSize: 12, opacity: 0.9 },
-
-  grid2: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12, marginTop: 12 },
-
-  winnerCard: {
-    border: "1px solid rgba(255,255,255,.08)",
-    borderRadius: 14,
-    padding: 12,
-    background: "rgba(0,0,0,.18)",
-  },
-  winnerTitle: { fontSize: 13, fontWeight: 900, opacity: 0.95, marginBottom: 10 },
-  winnerBox: { display: "flex", flexDirection: "column", gap: 6 },
-  winnerName: { fontSize: 16, fontWeight: 900 },
-  winnerDept: { fontSize: 13, opacity: 0.85 },
-  winnerVotes: { fontSize: 12, opacity: 0.9, fontWeight: 800 },
-  tieTag: {
-    marginTop: 6,
-    fontSize: 11,
-    padding: "4px 8px",
-    borderRadius: 999,
-    width: "fit-content",
-    border: "1px solid rgba(255,210,120,.35)",
-    background: "rgba(255,210,120,.12)",
-    color: "rgba(255,220,160,.95)",
-    fontWeight: 900,
-  },
-
-  block: {
-    border: "1px solid rgba(255,255,255,.08)",
-    borderRadius: 14,
-    padding: 12,
-    background: "rgba(0,0,0,.16)",
-  },
-  blockTitle: { fontSize: 14, fontWeight: 900 },
-
-  pill: {
-    fontSize: 12,
-    padding: "6px 10px",
-    borderRadius: 999,
-    border: "1px solid rgba(255,255,255,.12)",
-    background: "rgba(255,255,255,.05)",
-    opacity: 0.95,
-  },
-
-  input: {
-    minWidth: 260,
-    padding: "10px 10px",
-    borderRadius: 12,
-    border: "1px solid rgba(255,255,255,.12)",
-    background: "rgba(255,255,255,.04)",
-    color: "rgba(255,255,255,.92)",
-    outline: "none",
-    fontWeight: 800,
-  },
-  inputSmall: {
-    width: "100%",
-    padding: "9px 10px",
-    borderRadius: 12,
-    border: "1px solid rgba(255,255,255,.12)",
-    background: "rgba(255,255,255,.04)",
-    color: "rgba(255,255,255,.92)",
-    outline: "none",
-    fontWeight: 700,
-  },
-
-  table: {
-    marginTop: 10,
-    border: "1px solid rgba(255,255,255,.08)",
-    borderRadius: 14,
-    overflow: "hidden",
-  },
-  th: { fontSize: 12, opacity: 0.75, fontWeight: 900 },
-
-  trHeadManage: {
-    display: "grid",
-    gridTemplateColumns: "1fr 1fr 1fr .6fr",
-    padding: "10px 10px",
-    background: "rgba(255,255,255,.05)",
-    borderBottom: "1px solid rgba(255,255,255,.08)",
-    gap: 10,
-  },
-  trManage: {
-    display: "grid",
-    gridTemplateColumns: "1fr 1fr 1fr .6fr",
-    padding: "10px 10px",
-    borderBottom: "1px solid rgba(255,255,255,.06)",
-    alignItems: "center",
-    gap: 10,
-  },
-
-  trHeadLive: {
-    display: "grid",
-    gridTemplateColumns: "1.2fr 1fr .4fr 1fr",
-    padding: "10px 10px",
-    background: "rgba(255,255,255,.05)",
-    borderBottom: "1px solid rgba(255,255,255,.08)",
-    gap: 10,
-  },
-  trLive: {
-    display: "grid",
-    gridTemplateColumns: "1.2fr 1fr .4fr 1fr",
-    padding: "10px 10px",
-    borderBottom: "1px solid rgba(255,255,255,.06)",
-    alignItems: "center",
-    gap: 10,
-  },
-
-  trHeadVoters: {
-    display: "grid",
-    gridTemplateColumns: ".7fr .9fr 1.2fr",
-    padding: "10px 10px",
-    background: "rgba(255,255,255,.05)",
-    borderBottom: "1px solid rgba(255,255,255,.08)",
-    gap: 10,
-  },
-  trVoters: {
-    display: "grid",
-    gridTemplateColumns: ".7fr .9fr 1.2fr",
-    padding: "10px 10px",
-    borderBottom: "1px solid rgba(255,255,255,.06)",
-    alignItems: "center",
-    gap: 10,
-  },
-
-  trHeadFeedback: {
-    display: "grid",
-    gridTemplateColumns: ".7fr .5fr 1.2fr 1.2fr 1fr",
-    padding: "10px 10px",
-    background: "rgba(255,255,255,.05)",
-    borderBottom: "1px solid rgba(255,255,255,.08)",
-    gap: 10,
-  },
-  trFeedback: {
-    display: "grid",
-    gridTemplateColumns: ".7fr .5fr 1.2fr 1.2fr 1fr",
-    padding: "10px 10px",
-    borderBottom: "1px solid rgba(255,255,255,.06)",
-    alignItems: "center",
-    gap: 10,
-  },
-
-  td: { fontSize: 13 },
-  tdMono: { fontSize: 12, fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace", opacity: 0.92 },
-
-  emptyRow: { padding: 12, fontSize: 12, opacity: 0.75 },
-  emptyBig: { padding: 14, fontSize: 13, opacity: 0.8, border: "1px dashed rgba(255,255,255,.15)", borderRadius: 14 },
-
-  barWrap: {
-    position: "relative",
-    height: 16,
-    borderRadius: 999,
-    background: "rgba(255,255,255,.08)",
-    overflow: "hidden",
-  },
-  bar: { height: "100%", background: "rgba(120,160,255,.55)" },
-  barText: { position: "absolute", top: 0, left: 8, fontSize: 11, lineHeight: "16px", opacity: 0.9 },
-
-  footer: { fontSize: 12, opacity: 0.65, padding: "6px 4px" },
+  page: { minHeight: "100vh", background: "linear-gradient(180deg, #07111d 0%, #0a1728 55%, #0c1b30 100%)", color: "white", fontFamily: "\"Segoe UI\", Arial, sans-serif" },
+  topbar: { display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", padding: 18, borderBottom: "1px solid rgba(255,255,255,.08)", background: "rgba(8,17,31,.94)", position: "sticky", top: 0, zIndex: 10 },
+  title: { fontSize: 22, fontWeight: 900 }, sub: { fontSize: 12, opacity: 0.74, marginTop: 4 },
+  layout: { display: "grid", gridTemplateColumns: "240px 1fr", gap: 16, padding: 16 },
+  sidebar: { display: "flex", flexDirection: "column", gap: 8, padding: 12, borderRadius: 18, border: "1px solid rgba(255,255,255,.08)", background: "rgba(255,255,255,.03)", height: "fit-content" },
+  nav: { padding: "11px 13px", borderRadius: 12, border: "1px solid rgba(255,255,255,.08)", background: "rgba(255,255,255,.03)", color: "inherit", textAlign: "left", cursor: "pointer", fontWeight: 700 },
+  navActive: { background: "rgba(64,131,255,.18)", border: "1px solid rgba(64,131,255,.34)" },
+  main: { display: "flex", flexDirection: "column", gap: 16 },
+  card: { padding: 18, borderRadius: 18, border: "1px solid rgba(255,255,255,.08)", background: "rgba(255,255,255,.03)", boxShadow: "0 16px 40px rgba(0,0,0,.18)" },
+  h2: { margin: 0, fontSize: 18 }, sectionSub: { fontSize: 13, opacity: 0.74, marginTop: 6, maxWidth: 700 },
+  row: { display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }, rowBetween: { display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "center" },
+  statusWrap: { display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }, statusChip: { padding: "8px 12px", borderRadius: 999, fontSize: 12, fontWeight: 800 },
+  statusLive: { background: "rgba(25,181,107,.18)", border: "1px solid rgba(25,181,107,.32)", color: "#9ff0c8" }, statusIdle: { background: "rgba(255,183,77,.16)", border: "1px solid rgba(255,183,77,.28)", color: "#ffd694" },
+  metricsGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12, marginTop: 18 },
+  metricCard: { padding: 16, borderRadius: 16, border: "1px solid rgba(255,255,255,.08)", background: "linear-gradient(180deg, rgba(255,255,255,.07), rgba(255,255,255,.03))" },
+  metricLabel: { fontSize: 12, textTransform: "uppercase", letterSpacing: 0.8, opacity: 0.68 }, metricValue: { fontSize: 30, fontWeight: 900, marginTop: 8 }, metricValueSmall: { fontSize: 18, fontWeight: 800, marginTop: 8, lineHeight: 1.4 }, metricNote: { fontSize: 12, opacity: 0.72, marginTop: 8, lineHeight: 1.5 },
+  grid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 14, marginTop: 16 }, stack: { display: "grid", gap: 14, marginTop: 16 },
+  block: { padding: 14, borderRadius: 16, border: "1px solid rgba(255,255,255,.08)", background: "rgba(0,0,0,.16)" },
+  winnerCard: { padding: 18, borderRadius: 18, border: "1px solid rgba(255,255,255,.08)", background: "linear-gradient(180deg, rgba(255,255,255,.05), rgba(0,0,0,.18))" },
+  winnerHeading: { fontSize: 18, fontWeight: 800 },
+  winnerHighlight: { marginTop: 14, padding: 16, borderRadius: 16, border: "1px solid rgba(94,234,212,.18)", background: "linear-gradient(135deg, rgba(94,234,212,.14), rgba(255,255,255,.02))" },
+  winnerLabel: { fontSize: 11, textTransform: "uppercase", letterSpacing: 0.9, opacity: 0.72 },
+  winnerName: { fontSize: 24, fontWeight: 900, marginTop: 8 },
+  winnerMeta: { fontSize: 13, opacity: 0.78, marginTop: 4 },
+  stackList: { display: "grid", gap: 0, marginTop: 14 },
+  heroPanel: { padding: 18, borderRadius: 16, border: "1px solid rgba(114,156,255,.18)", background: "linear-gradient(135deg, rgba(64,131,255,.18), rgba(10,23,40,.55))" },
+  heroTitle: { fontSize: 15, fontWeight: 800, marginBottom: 12 }, timelineRow: { display: "flex", justifyContent: "space-between", gap: 12, padding: "10px 0", borderBottom: "1px solid rgba(255,255,255,.08)" },
+  quickAction: { width: "100%", display: "flex", justifyContent: "space-between", gap: 16, alignItems: "center", padding: "14px 0", background: "transparent", border: "none", borderBottom: "1px solid rgba(255,255,255,.08)", color: "inherit", textAlign: "left", cursor: "pointer" },
+  quickNote: { display: "block", fontSize: 12, opacity: 0.72, marginTop: 4, lineHeight: 1.45 },
+  winnersHero: { position: "relative", overflow: "hidden", borderRadius: 22, border: "1px solid rgba(255,255,255,.08)", background: "linear-gradient(135deg, rgba(18,34,62,.96), rgba(7,17,29,.96))", padding: 24, minHeight: 220 },
+  winnersGlowA: { position: "absolute", width: 280, height: 280, borderRadius: "50%", background: "rgba(123,92,255,.20)", filter: "blur(18px)", top: -70, right: -40 },
+  winnersGlowB: { position: "absolute", width: 220, height: 220, borderRadius: "50%", background: "rgba(55,189,181,.18)", filter: "blur(18px)", bottom: -70, left: -30 },
+  winnersHeroContent: { position: "relative", zIndex: 1, maxWidth: 760 },
+  winnersEyebrow: { fontSize: 11, textTransform: "uppercase", letterSpacing: 1.4, opacity: 0.74 },
+  winnersTitle: { margin: "10px 0 0", fontSize: 40, lineHeight: 1.05, fontWeight: 900 },
+  winnersCopy: { marginTop: 14, maxWidth: 620, fontSize: 14, lineHeight: 1.7, opacity: 0.8 },
+  winnersMetaRow: { marginTop: 20, display: "flex", gap: 10, flexWrap: "wrap" },
+  winnersMetaPill: { padding: "8px 12px", borderRadius: 999, fontSize: 12, border: "1px solid rgba(255,255,255,.12)", background: "rgba(255,255,255,.06)" },
+  winnersGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 16, marginTop: 18 },
+  winnerShowcase: { position: "relative", overflow: "hidden", padding: "22px 18px 18px", borderRadius: 22, border: "1px solid rgba(255,255,255,.09)", background: "linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.03))", boxShadow: "0 18px 50px rgba(0,0,0,.18)" },
+  winnerAccent: { position: "absolute", inset: "0 auto auto 0", width: "100%", height: 5, background: "linear-gradient(90deg, #7dd3fc, #c084fc, #f9a8d4)" },
+  winnerTopRow: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 },
+  winnerAvatar: { width: 58, height: 58, borderRadius: "50%", display: "grid", placeItems: "center", fontSize: 20, fontWeight: 900, background: "linear-gradient(135deg, rgba(125,211,252,.24), rgba(192,132,252,.22))", border: "1px solid rgba(255,255,255,.12)" },
+  winnerIcon: { width: 50, height: 50, borderRadius: 16, display: "grid", placeItems: "center", fontSize: 24, background: "linear-gradient(135deg, rgba(255,215,110,.18), rgba(255,168,76,.10))", border: "1px solid rgba(255,220,120,.22)", boxShadow: "0 10px 24px rgba(0,0,0,.16)" },
+  winnerPosition: { marginTop: 18, fontSize: 12, textTransform: "uppercase", letterSpacing: 1, opacity: 0.68 },
+  winnerList: { display: "grid", gap: 10, marginTop: 6 },
+  winnerEntry: { padding: "10px 12px", borderRadius: 16, background: "rgba(255,255,255,.05)", border: "1px solid rgba(255,255,255,.08)" },
+  winnerPerson: { marginTop: 8, fontSize: 24, lineHeight: 1.15, fontWeight: 900 },
+  winnerDepartment: { marginTop: 6, fontSize: 13, opacity: 0.76 },
+  winnerVoteTag: { marginTop: 18, width: "fit-content", padding: "8px 12px", borderRadius: 999, fontSize: 12, fontWeight: 800, border: "1px solid rgba(255,255,255,.10)", background: "rgba(255,255,255,.06)" },
+  winnerCrown: { marginTop: 12, fontSize: 12, opacity: 0.74 },
+  tieBadge: { marginTop: 12, width: "fit-content", padding: "7px 10px", borderRadius: 999, fontSize: 11, fontWeight: 800, border: "1px solid rgba(255,205,86,.26)", background: "rgba(255,205,86,.12)", color: "#ffe29a" },
+  blockTitle: { fontWeight: 800, marginBottom: 10 }, featureItem: { padding: "10px 12px", borderRadius: 12, background: "rgba(255,255,255,.04)", fontSize: 13, lineHeight: 1.5, marginTop: 8 },
+  auditLine: { padding: "10px 0", borderBottom: "1px solid rgba(255,255,255,.06)" }, resultRow: { display: "grid", gridTemplateColumns: "1.1fr 1fr auto", gap: 12, padding: "10px 0", borderBottom: "1px solid rgba(255,255,255,.06)", fontSize: 13 },
+  line: { padding: "8px 0", borderBottom: "1px solid rgba(255,255,255,.06)", fontSize: 13 },
+  btn: { padding: "10px 12px", borderRadius: 12, border: "1px solid rgba(255,255,255,.12)", background: "rgba(255,255,255,.05)", color: "inherit", cursor: "pointer", fontWeight: 700 },
+  primaryBtn: { padding: "10px 12px", borderRadius: 12, border: "1px solid rgba(64,131,255,.36)", background: "rgba(64,131,255,.20)", color: "inherit", cursor: "pointer", fontWeight: 800 },
+  dangerBtn: { padding: "10px 12px", borderRadius: 12, border: "1px solid rgba(255,110,110,.35)", background: "rgba(255,110,110,.15)", color: "inherit", cursor: "pointer", fontWeight: 800 },
+  message: { padding: 12, borderRadius: 12, border: "1px solid rgba(255,255,255,.10)", background: "rgba(255,255,255,.05)" },
+  pill: { padding: "6px 10px", borderRadius: 999, fontSize: 12, border: "1px solid rgba(255,255,255,.12)", background: "rgba(255,255,255,.05)" },
+  form: { display: "flex", flexDirection: "column", gap: 10, marginTop: 10 },
+  input: { width: "100%", minWidth: 0, padding: "10px 12px", borderRadius: 12, border: "1px solid rgba(255,255,255,.12)", background: "rgba(255,255,255,.04)", color: "inherit", outline: "none" },
+  checkbox: { display: "flex", gap: 10, alignItems: "center", fontSize: 13 },
+  candidateRow: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr auto", gap: 10, alignItems: "center", padding: "10px 0", borderBottom: "1px solid rgba(255,255,255,.06)" },
+  smallText: { fontSize: 12, opacity: 0.72 },
+  textarea: { minHeight: 220, width: "100%", padding: 12, borderRadius: 14, border: "1px solid rgba(255,255,255,.12)", background: "rgba(255,255,255,.04)", color: "inherit", resize: "vertical", outline: "none" },
 };
 

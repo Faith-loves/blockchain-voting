@@ -116,14 +116,18 @@ export default function Dashboard() {
     try {
       window?.ethereum?.on?.("accountsChanged", onAccountsChanged);
       window?.ethereum?.on?.("chainChanged", onChainChanged);
-    } catch {}
+    } catch {
+      // MetaMask event listeners are optional in older wallet providers.
+    }
 
     return () => {
       cancelled = true;
       try {
         window?.ethereum?.removeListener?.("accountsChanged", onAccountsChanged);
         window?.ethereum?.removeListener?.("chainChanged", onChainChanged);
-      } catch {}
+      } catch {
+        // Nothing to clean up if the provider has already gone away.
+      }
     };
   }, [nav, role]);
 

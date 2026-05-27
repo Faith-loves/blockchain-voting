@@ -14,7 +14,6 @@ export default function Vote() {
 
   const [loading, setLoading] = useState(true);
   const [election, setElection] = useState(null);
-  const [alreadyVoted, setAlreadyVoted] = useState(false);
   const [err, setErr] = useState("");
 
   const [step, setStep] = useState(0);
@@ -53,7 +52,6 @@ export default function Vote() {
         if (cancelled) return;
 
         setElection(data.election);
-        setAlreadyVoted(!!data.alreadyVoted);
 
         if (data.alreadyVoted) {
           nav("/dashboard");
@@ -127,7 +125,10 @@ export default function Vote() {
         body: JSON.stringify({ selections })
       });
 
-      const data = await res.json();
+      const contentType = res.headers.get("content-type") || "";
+      const raw = await res.text();
+      const data = contentType.includes("application/json") ? JSON.parse(raw) : null;
+      if (!data) throw new Error("Server did not return JSON. Check that the backend is running on port 5000.");
       if (!res.ok || !data.ok) throw new Error(data?.message || "Vote submission failed");
 
       // ✅ save all returned receipt data
@@ -433,7 +434,7 @@ export default function Vote() {
               <button className="btn2 primary2" onClick={goFeedback}>Yes, Feedback</button>
 
               {/* ✅ NEW: Verification link */}
-              <button className="btn2 primary2" onClick={goVerify} disabled={!receiptHash}>
+              <button className="btn2 primary2" onClick={goVerify} disabled={!receiptId}>
                 Verify Now
               </button>
             </div>

@@ -1,0 +1,15 @@
+{
+  "name": "blockchain-voting-workspace",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "install:all": "npm --prefix client install && npm --prefix server install && npm --prefix chain install",
+    "dev:client": "npm --prefix client run dev",
+    "dev:server": "npm --prefix server run dev",
+    "dev:chain": "npm --prefix chain run node",
+    "build": "npm --prefix client run build",
+    "start": "npm --prefix server run start",
+    "deploy:chain": "npm --prefix chain run deploy",
+    "test:chain": "npm --prefix chain run test"
+  }
+}

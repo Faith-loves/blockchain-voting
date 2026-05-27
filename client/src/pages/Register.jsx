@@ -10,20 +10,24 @@ export default function Register() {
   const [err, setErr] = useState("");
 
   const canSubmit = useMemo(() => {
-    return (
-      form.email.trim() &&
-      form.matric.trim() &&
-      form.password.trim().length >= 6 &&
-      form.password === form.confirm
-    );
+    const emailOk = form.email.trim().length > 0;
+    const matricOk = form.matric.trim().length > 0;
+    const passwordOk = form.password.trim().length >= 6;
+    const confirmOk = form.password === form.confirm && form.confirm.length > 0;
+    return emailOk && matricOk && passwordOk && confirmOk;
   }, [form]);
 
   function onChange(e) {
-    setForm((p) => ({ ...p, [e.target.name]: e.target.value }));
+    setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
   }
 
   async function onSubmit(e) {
     e.preventDefault();
+    if (!canSubmit) {
+      setErr("Complete all fields and make sure both passwords match.");
+      return;
+    }
+
     setErr("");
     setLoading(true);
 
@@ -33,18 +37,18 @@ export default function Register() {
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          email: form.email.trim(),
+          email: form.email.trim().toLowerCase(),
           matric: form.matric.trim(),
-          password: form.password
-        })
+          password: form.password,
+        }),
       });
 
       const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data?.message || "Registration failed");
+      if (!res.ok || !data?.ok) throw new Error(data?.message || "Registration failed");
 
       nav("/login");
     } catch (e2) {
-      setErr(String(e2.message || e2));
+      setErr(String(e2?.message || e2));
     } finally {
       setLoading(false);
     }
@@ -92,7 +96,6 @@ export default function Register() {
                 className="fieldInput"
                 name="password"
                 type="password"
-                placeholder="••••••••"
                 value={form.password}
                 onChange={onChange}
               />
@@ -104,28 +107,37 @@ export default function Register() {
                 className="fieldInput"
                 name="confirm"
                 type="password"
-                placeholder="••••••••"
                 value={form.confirm}
                 onChange={onChange}
               />
             </label>
 
-            {err && (
+            {!canSubmit && !err ? (
+              <div className="authError">
+                Fill email, matric number, password, and matching confirm password to enable account creation.
+              </div>
+            ) : null}
+
+            {err ? (
               <div className="authError">
                 <strong>Register error:</strong> {err}
               </div>
-            )}
+            ) : null}
 
-            <button className={`authBtn ${canSubmit && !loading ? "on" : ""}`} disabled={!canSubmit || loading}>
-              {loading ? "Creating…" : "Create account"}
+            <button
+              type="submit"
+              className={`authBtn ${canSubmit && !loading ? "on" : ""}`}
+              disabled={!canSubmit || loading}
+            >
+              {loading ? "Creating..." : "Create account"}
             </button>
 
             <div className="authFooter">
               <button type="button" className="linkBtn" onClick={() => nav("/login")}>
-                Already have an account? Sign in →
+                Already have an account? Sign in
               </button>
               <button type="button" className="linkBtn" onClick={() => nav("/")}>
-                ← Back to Home
+                Back to Home
               </button>
             </div>
           </form>

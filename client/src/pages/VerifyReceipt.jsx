@@ -33,7 +33,46 @@ export default function VerifyReceipt() {
   }, [nav]);
 
   useEffect(() => {
-    setHasWallet(typeof window !== "undefined" && !!window.ethereum);
+    const ethereum = typeof window !== "undefined" ? window.ethereum : null;
+    setHasWallet(!!ethereum);
+    if (!ethereum) return;
+
+    let cancelled = false;
+
+    async function syncWallet() {
+      try {
+        const [accs, cid] = await Promise.all([
+          ethereum.request({ method: "eth_accounts" }),
+          ethereum.request({ method: "eth_chainId" }),
+        ]);
+        if (cancelled) return;
+        setWalletAddr(accs?.[0] || "");
+        setChainId(cid || null);
+      } catch {
+        if (cancelled) return;
+        setWalletAddr("");
+        setChainId(null);
+      }
+    }
+
+    const onAccountsChanged = (accs) => {
+      setWalletAddr(accs?.[0] || "");
+      setStatus(accs?.[0] ? "Wallet account changed." : "MetaMask disconnected. Connect wallet again.");
+    };
+    const onChainChanged = (cid) => {
+      setChainId(cid || null);
+      setStatus("MetaMask network changed.");
+    };
+
+    syncWallet();
+    ethereum.on?.("accountsChanged", onAccountsChanged);
+    ethereum.on?.("chainChanged", onChainChanged);
+
+    return () => {
+      cancelled = true;
+      ethereum.removeListener?.("accountsChanged", onAccountsChanged);
+      ethereum.removeListener?.("chainChanged", onChainChanged);
+    };
   }, []);
 
   const chainOk = useMemo(() => {
@@ -63,9 +102,49 @@ export default function VerifyReceipt() {
       setWalletAddr(accs?.[0] || "");
       const cid = await window.ethereum.request({ method: "eth_chainId" });
       setChainId(cid || null);
-      setStatus("Wallet connected.");
+      const dec = typeof cid === "string" && cid.startsWith("0x") ? parseInt(cid, 16) : Number(cid);
+      setStatus(dec === LOCAL_CHAIN_ID ? "Wallet connected." : `Wallet connected. Switch to Localhost 8545 (chainId ${LOCAL_CHAIN_ID}).`);
     } catch {
       setStatus("Wallet connection cancelled or failed.");
+    }
+  }
+
+  async function switchToLocalNetwork() {
+    if (!window?.ethereum) {
+      setStatus("MetaMask not found. Install MetaMask.");
+      return;
+    }
+
+    const chainIdHex = `0x${LOCAL_CHAIN_ID.toString(16)}`;
+    try {
+      await window.ethereum.request({
+        method: "wallet_switchEthereumChain",
+        params: [{ chainId: chainIdHex }],
+      });
+      const cid = await window.ethereum.request({ method: "eth_chainId" });
+      setChainId(cid || null);
+      setStatus("MetaMask switched to Localhost 8545.");
+    } catch (err) {
+      if (err?.code === 4902) {
+        try {
+          await window.ethereum.request({
+            method: "wallet_addEthereumChain",
+            params: [{
+              chainId: chainIdHex,
+              chainName: "Hardhat Local",
+              nativeCurrency: { name: "ETH", symbol: "ETH", decimals: 18 },
+              rpcUrls: ["http://127.0.0.1:8545"],
+            }],
+          });
+          const cid = await window.ethereum.request({ method: "eth_chainId" });
+          setChainId(cid || null);
+          setStatus("Hardhat Local added and selected in MetaMask.");
+        } catch {
+          setStatus("MetaMask could not add Hardhat Local. Add it manually.");
+        }
+      } else {
+        setStatus("MetaMask network switch cancelled or failed.");
+      }
     }
   }
 
@@ -161,15 +240,23 @@ export default function VerifyReceipt() {
       }
 
       const provider = new BrowserProvider(window.ethereum);
-      const signer = await provider.getSigner();
-      const contract = new Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+      const code = await provider.getCode(CONTRACT_ADDRESS);
+      if (!code || code === "0x") {
+        throw new Error(`No voting contract was found at ${CONTRACT_ADDRESS}. Redeploy Hardhat and update client/src/config.ts.`);
+      }
+      const contract = new Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
 
       const recorded = await contract.isReceiptRecorded(String(data.receiptHash));
       setChainOkRecorded(!!recorded);
 
       setStatus(recorded ? "DB OK ✅  Chain OK ✅" : "DB OK ✅  Chain NOT RECORDED ❌");
     } catch (e) {
-      setStatus(e?.shortMessage || e?.message || "Verification failed.");
+      const msg = e?.shortMessage || e?.message || "Verification failed.";
+      if (String(msg).toLowerCase().includes("could not decode result data")) {
+        setStatus(`Contract call failed at ${CONTRACT_ADDRESS}. This usually means the contract address is wrong for your current Hardhat network.`);
+      } else {
+        setStatus(msg);
+      }
     } finally {
       setLoading(false);
     }
@@ -241,6 +328,10 @@ export default function VerifyReceipt() {
 
             <button className="btn2 ghost2" onClick={connectWallet} disabled={!hasWallet}>
               {walletAddr ? `Wallet: ${shortAddr(walletAddr)}` : "Connect Wallet"}
+            </button>
+
+            <button className="btn2 ghost2" onClick={switchToLocalNetwork} disabled={!hasWallet || chainOk}>
+              Switch Network
             </button>
 
             <button className="btn2 primary2" onClick={verifyNow} disabled={loading}>

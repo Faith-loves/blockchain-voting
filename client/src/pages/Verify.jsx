@@ -203,7 +203,7 @@ export default function Verify() {
           />
 
           <div className="voteNav" style={{ marginTop: 15 }}>
-            <button className="btn2 ghost2" onClick={connectWallet}>
+            <button className="btn2 ghost2" onClick={connectWallet} disabled={!hasWallet}>
               {walletAddr ? "Wallet Connected" : "Connect Wallet"}
             </button>
 
