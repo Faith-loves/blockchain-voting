@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { API_BASE_URL } from "../config";
 import { clearSession, csrfHeaders } from "../utils/auth";
 
@@ -35,7 +35,26 @@ const saveBlob = (blob, filename) => {
   window.setTimeout(() => window.URL.revokeObjectURL(url), 1000);
 };
 
+function useMediaQuery(query) {
+  const [matches, setMatches] = useState(() =>
+    typeof window !== "undefined" ? window.matchMedia(query).matches : false
+  );
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const media = window.matchMedia(query);
+    const onChange = () => setMatches(media.matches);
+    onChange();
+    media.addEventListener?.("change", onChange);
+    return () => media.removeEventListener?.("change", onChange);
+  }, [query]);
+
+  return matches;
+}
+
 export default function AdminPanel() {
+  const isTablet = useMediaQuery("(max-width: 900px)");
+  const isMobile = useMediaQuery("(max-width: 640px)");
   const [tab, setTab] = useState("winners");
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
@@ -89,6 +108,102 @@ export default function AdminPanel() {
     { label: "Feedback", value: feedback.length, note: "Voter comments and issue reports" },
     { label: "Archives", value: elections.filter((item) => item.archivedAt).length, note: "Historical election records" },
   ];
+
+  const sx = useMemo(() => {
+    if (!isTablet && !isMobile) return styles;
+
+    return {
+      ...styles,
+      page: { ...styles.page, overflowX: "hidden" },
+      topbar: {
+        ...styles.topbar,
+        alignItems: "flex-start",
+        flexDirection: isMobile ? "column" : "row",
+        padding: isMobile ? 14 : 16,
+      },
+      title: { ...styles.title, fontSize: isMobile ? 19 : 21 },
+      layout: {
+        ...styles.layout,
+        display: "flex",
+        flexDirection: "column",
+        padding: isMobile ? 10 : 14,
+      },
+      sidebar: {
+        ...styles.sidebar,
+        flexDirection: "row",
+        overflowX: "auto",
+        borderRadius: 14,
+        padding: 8,
+        width: "100%",
+        boxSizing: "border-box",
+      },
+      nav: {
+        ...styles.nav,
+        whiteSpace: "nowrap",
+        flex: "0 0 auto",
+        textAlign: "center",
+      },
+      main: { ...styles.main, minWidth: 0 },
+      card: { ...styles.card, padding: isMobile ? 12 : 16, borderRadius: 14 },
+      grid: {
+        ...styles.grid,
+        gridTemplateColumns: "minmax(0, 1fr)",
+        gap: 12,
+        marginTop: 12,
+      },
+      metricsGrid: {
+        ...styles.metricsGrid,
+        gridTemplateColumns: "minmax(0, 1fr)",
+      },
+      winnersTitle: {
+        ...styles.winnersTitle,
+        fontSize: isMobile ? 30 : 34,
+      },
+      winnersHero: {
+        ...styles.winnersHero,
+        padding: isMobile ? 16 : 20,
+        minHeight: "auto",
+      },
+      winnersGrid: {
+        ...styles.winnersGrid,
+        gridTemplateColumns: "minmax(0, 1fr)",
+      },
+      rowBetween: {
+        ...styles.rowBetween,
+        alignItems: "stretch",
+        flexDirection: isMobile ? "column" : "row",
+      },
+      row: {
+        ...styles.row,
+        width: isMobile ? "100%" : undefined,
+      },
+      resultRow: {
+        ...styles.resultRow,
+        gridTemplateColumns: "minmax(0, 1fr)",
+      },
+      candidateRow: {
+        ...styles.candidateRow,
+        gridTemplateColumns: "minmax(0, 1fr)",
+        alignItems: "stretch",
+      },
+      timelineRow: {
+        ...styles.timelineRow,
+        alignItems: "flex-start",
+        flexDirection: isMobile ? "column" : "row",
+      },
+      input: {
+        ...styles.input,
+        boxSizing: "border-box",
+      },
+      textarea: {
+        ...styles.textarea,
+        boxSizing: "border-box",
+      },
+      btn: { ...styles.btn, width: isMobile ? "100%" : undefined },
+      primaryBtn: { ...styles.primaryBtn, width: isMobile ? "100%" : undefined },
+      dangerBtn: { ...styles.dangerBtn, width: isMobile ? "100%" : undefined },
+    };
+  }, [isMobile, isTablet]);
 
   function patchPosition(id, patch) { setDraftPositions((prev) => prev.map((item) => (item.id === id ? { ...item, ...patch } : item))); }
   function addPosition() { setDraftPositions((prev) => [...prev, { id: `pos-${Math.random().toString(16).slice(2, 8)}`, name: "New Position", candidates: [] }]); }
@@ -176,50 +291,50 @@ export default function AdminPanel() {
   }
 
   return (
-    <div style={styles.page}>
-      <div style={styles.topbar}>
+    <div style={sx.page}>
+      <div style={sx.topbar}>
         <div>
-          <div style={styles.title}>Admin Control Center</div>
-          <div style={styles.sub}>{currentElection?.title || "No current election"} | {votes.length} votes | {admins.length} admins</div>
+          <div style={sx.title}>Admin Control Center</div>
+          <div style={sx.sub}>{currentElection?.title || "No current election"} | {votes.length} votes | {admins.length} admins</div>
         </div>
-        <div style={styles.row}>
-          <button style={styles.btn} onClick={refreshAll} disabled={loading}>{loading ? "Refreshing..." : "Refresh"}</button>
-          <button style={styles.btn} onClick={() => { clearSession(); window.location.href = "/login"; }}>Logout</button>
+        <div style={sx.row}>
+          <button style={sx.btn} onClick={refreshAll} disabled={loading}>{loading ? "Refreshing..." : "Refresh"}</button>
+          <button style={sx.btn} onClick={() => { clearSession(); window.location.href = "/login"; }}>Logout</button>
         </div>
       </div>
 
-      <div style={styles.layout}>
-        <aside style={styles.sidebar}>
+      <div style={sx.layout}>
+        <aside style={sx.sidebar}>
           {["winners", "overview", "manage", "schedule", "admins", "history", "tools"].map((value) => (
-            <button key={value} style={{ ...styles.nav, ...(tab === value ? styles.navActive : null) }} onClick={() => setTab(value)}>
+            <button key={value} style={{ ...sx.nav, ...(tab === value ? sx.navActive : null) }} onClick={() => setTab(value)}>
               {value === "winners" ? "Winners" : value === "overview" ? "Overview" : value === "manage" ? "Manage Ballot" : value.charAt(0).toUpperCase() + value.slice(1)}
             </button>
           ))}
         </aside>
 
-        <main style={styles.main}>
-          {msg ? <div style={styles.message}>{msg}</div> : null}
+        <main style={sx.main}>
+          {msg ? <div style={sx.message}>{msg}</div> : null}
 
-          {tab === "winners" && <section style={styles.card}>
-            <div style={styles.winnersHero}>
-              <div style={styles.winnersGlowA} />
-              <div style={styles.winnersGlowB} />
-              <div style={styles.winnersHeroContent}>
-                <div style={styles.winnersEyebrow}>Election Results</div>
-                <h2 style={styles.winnersTitle}>Winners Gallery</h2>
-                <div style={styles.winnersCopy}>
+          {tab === "winners" && <section style={sx.card}>
+            <div style={sx.winnersHero}>
+              <div style={sx.winnersGlowA} />
+              <div style={sx.winnersGlowB} />
+              <div style={sx.winnersHeroContent}>
+                <div style={sx.winnersEyebrow}>Election Results</div>
+                <h2 style={sx.winnersTitle}>Winners Gallery</h2>
+                <div style={sx.winnersCopy}>
                   A more polished presentation of the current winning candidates across every position in the election.
                 </div>
-                <div style={styles.winnersMetaRow}>
-                  <div style={styles.winnersMetaPill}>{currentElection?.title || "No current election"}</div>
-                  <div style={styles.winnersMetaPill}>{summary.length} positions</div>
-                  <div style={styles.winnersMetaPill}>{votes.length} votes recorded</div>
-                  <div style={styles.winnersMetaPill}>{currentElection?.isActive ? "Live results" : "Final results"}</div>
+                <div style={sx.winnersMetaRow}>
+                  <div style={sx.winnersMetaPill}>{currentElection?.title || "No current election"}</div>
+                  <div style={sx.winnersMetaPill}>{summary.length} positions</div>
+                  <div style={sx.winnersMetaPill}>{votes.length} votes recorded</div>
+                  <div style={sx.winnersMetaPill}>{currentElection?.isActive ? "Live results" : "Final results"}</div>
                 </div>
               </div>
             </div>
 
-            <div style={styles.winnersGrid}>
+            <div style={sx.winnersGrid}>
               {summary.map((position) => {
                 const winner = position.candidates?.[0] || null;
                 const second = position.candidates?.[1] || null;
@@ -235,71 +350,71 @@ export default function AdminPanel() {
                   : "--";
 
                 return (
-                  <div key={position.id} style={styles.winnerShowcase}>
-                    <div style={styles.winnerAccent} />
-                    <div style={styles.winnerTopRow}>
-                      <div style={styles.winnerAvatar}>{initials}</div>
-                      <div style={styles.winnerIcon}>{"\uD83C\uDFC6"}</div>
+                  <div key={position.id} style={sx.winnerShowcase}>
+                    <div style={sx.winnerAccent} />
+                    <div style={sx.winnerTopRow}>
+                      <div style={sx.winnerAvatar}>{initials}</div>
+                      <div style={sx.winnerIcon}>{"\uD83C\uDFC6"}</div>
                     </div>
-                    <div style={styles.winnerPosition}>{position.name}</div>
+                    <div style={sx.winnerPosition}>{position.name}</div>
                     {winners.length ? (
-                      <div style={styles.winnerList}>
+                      <div style={sx.winnerList}>
                         {winners.map((candidate) => (
-                          <div key={`${position.id}-${candidate.id || candidate.name}`} style={styles.winnerEntry}>
-                            <div style={styles.winnerPerson}>{candidate?.name || "No winner yet"}</div>
-                            <div style={styles.winnerDepartment}>{candidate?.dept || "Department not provided"}</div>
+                          <div key={`${position.id}-${candidate.id || candidate.name}`} style={sx.winnerEntry}>
+                            <div style={sx.winnerPerson}>{candidate?.name || "No winner yet"}</div>
+                            <div style={sx.winnerDepartment}>{candidate?.dept || "Department not provided"}</div>
                           </div>
                         ))}
                       </div>
                     ) : (
-                      <div style={styles.winnerList}>
-                        <div style={styles.winnerEntry}>
-                          <div style={styles.winnerPerson}>No winner yet</div>
-                          <div style={styles.winnerDepartment}>No votes recorded for this position</div>
+                      <div style={sx.winnerList}>
+                        <div style={sx.winnerEntry}>
+                          <div style={sx.winnerPerson}>No winner yet</div>
+                          <div style={sx.winnerDepartment}>No votes recorded for this position</div>
                         </div>
                       </div>
                     )}
-                    <div style={styles.winnerVoteTag}>{winner?.votes ? `${winner.votes} votes` : "No votes yet"}</div>
-                    {tie ? <div style={styles.tieBadge}>Joint winners</div> : <div style={styles.winnerCrown}>Winner</div>}
+                    <div style={sx.winnerVoteTag}>{winner?.votes ? `${winner.votes} votes` : "No votes yet"}</div>
+                    {tie ? <div style={sx.tieBadge}>Joint winners</div> : <div style={sx.winnerCrown}>Winner</div>}
                   </div>
                 );
               })}
             </div>
           </section>}
 
-          {tab === "overview" && <section style={styles.card}>
-            <div style={styles.rowBetween}>
+          {tab === "overview" && <section style={sx.card}>
+            <div style={sx.rowBetween}>
               <div>
-                <h2 style={styles.h2}>Executive Overview</h2>
-                <div style={styles.sectionSub}>A formal summary of election performance and the new admin tools now available.</div>
+                <h2 style={sx.h2}>Executive Overview</h2>
+                <div style={sx.sectionSub}>A formal summary of election performance and the new admin tools now available.</div>
               </div>
-              <div style={styles.statusWrap}>
-                <div style={{ ...styles.statusChip, ...(currentElection?.isActive ? styles.statusLive : styles.statusIdle) }}>{currentElection?.isActive ? "Election Active" : "Election Disabled"}</div>
-                <div style={styles.pill}>{currentElection?.title || "No current election"}</div>
+              <div style={sx.statusWrap}>
+                <div style={{ ...sx.statusChip, ...(currentElection?.isActive ? sx.statusLive : sx.statusIdle) }}>{currentElection?.isActive ? "Election Active" : "Election Disabled"}</div>
+                <div style={sx.pill}>{currentElection?.title || "No current election"}</div>
               </div>
             </div>
-            <div style={styles.metricsGrid}>{overviewStats.map((item) => <div key={item.label} style={styles.metricCard}><div style={styles.metricLabel}>{item.label}</div><div style={styles.metricValue}>{item.value}</div><div style={styles.metricNote}>{item.note}</div></div>)}</div>
-            <div style={styles.grid}>
-              <div style={styles.heroPanel}>
-                <div style={styles.heroTitle}>Current Election Window</div>
-                <div style={styles.timelineRow}><span>Starts</span><strong>{prettyDate(currentElection?.startsAt)}</strong></div>
-                <div style={styles.timelineRow}><span>Ends</span><strong>{prettyDate(currentElection?.endsAt)}</strong></div>
-                <div style={styles.timelineRow}><span>Positions</span><strong>{summary.length}</strong></div>
-                <div style={styles.timelineRow}><span>Latest Audit</span><strong>{audits[0] ? prettyDate(audits[0].createdAt) : "No activity yet"}</strong></div>
+            <div style={sx.metricsGrid}>{overviewStats.map((item) => <div key={item.label} style={sx.metricCard}><div style={sx.metricLabel}>{item.label}</div><div style={sx.metricValue}>{item.value}</div><div style={sx.metricNote}>{item.note}</div></div>)}</div>
+            <div style={sx.grid}>
+              <div style={sx.heroPanel}>
+                <div style={sx.heroTitle}>Current Election Window</div>
+                <div style={sx.timelineRow}><span>Starts</span><strong>{prettyDate(currentElection?.startsAt)}</strong></div>
+                <div style={sx.timelineRow}><span>Ends</span><strong>{prettyDate(currentElection?.endsAt)}</strong></div>
+                <div style={sx.timelineRow}><span>Positions</span><strong>{summary.length}</strong></div>
+                <div style={sx.timelineRow}><span>Latest Audit</span><strong>{audits[0] ? prettyDate(audits[0].createdAt) : "No activity yet"}</strong></div>
               </div>
-              <div style={styles.block}>
-                <div style={styles.blockTitle}>Quick Access</div>
+              <div style={sx.block}>
+                <div style={sx.blockTitle}>Quick Access</div>
                 {[
                   ["schedule", "Election Schedule", "Set start and end time, enable, disable, or archive the election."],
                   ["admins", "Admin Management", "Create and remove admin accounts from one place."],
                   ["tools", "Reports and Backup", "Download reports, audit files, backups, and restore data."],
                   ["history", "Election History", "Review archived elections and audit activity."],
-                ].map(([nextTab, title, note]) => <button key={title} style={styles.quickAction} onClick={() => setTab(nextTab)}><span><strong>{title}</strong><span style={styles.quickNote}>{note}</span></span><span>Open</span></button>)}
+                ].map(([nextTab, title, note]) => <button key={title} style={sx.quickAction} onClick={() => setTab(nextTab)}><span><strong>{title}</strong><span style={sx.quickNote}>{note}</span></span><span>Open</span></button>)}
               </div>
             </div>
-            <div style={styles.grid}>
-              <div style={styles.block}>
-                <div style={styles.blockTitle}>New Features Included</div>
+            <div style={sx.grid}>
+              <div style={sx.block}>
+                <div style={sx.blockTitle}>New Features Included</div>
                 {[
                   "Admin creation and removal controls",
                   "Election scheduling, enable, disable, and archive actions",
@@ -307,25 +422,25 @@ export default function AdminPanel() {
                   "Forgot-password and reset-password flow from login",
                   "Audit export, election report download, backup export, and restore",
                   "Election history and archive tracking",
-                ].map((item) => <div key={item} style={styles.featureItem}>{item}</div>)}
+                ].map((item) => <div key={item} style={sx.featureItem}>{item}</div>)}
               </div>
-              <div style={styles.block}>
-                <div style={styles.blockTitle}>Recent Audit</div>
-                {audits.slice(0, 6).map((audit) => <div key={`${audit._id}-${audit.createdAt}`} style={styles.auditLine}><strong>{audit.action}</strong><div style={styles.smallText}>{audit.adminMatric || "-"} | {prettyDate(audit.createdAt)}</div></div>)}
+              <div style={sx.block}>
+                <div style={sx.blockTitle}>Recent Audit</div>
+                {audits.slice(0, 6).map((audit) => <div key={`${audit._id}-${audit.createdAt}`} style={sx.auditLine}><strong>{audit.action}</strong><div style={sx.smallText}>{audit.adminMatric || "-"} | {prettyDate(audit.createdAt)}</div></div>)}
               </div>
             </div>
-            <div style={styles.stack}>{summary.map((position) => <div key={position.id} style={styles.block}><div style={styles.rowBetween}><div><div style={styles.blockTitle}>{position.name}</div><div style={styles.smallText}>Position ID: {position.id}</div></div><div style={styles.pill}>{position.candidates?.[0]?.votes > 0 ? `${position.candidates[0].votes} leading votes` : "No votes yet"}</div></div>{(position.candidates || []).map((candidate) => <div key={candidate.id} style={styles.resultRow}><span>{candidate.name}</span><span>{candidate.dept || "-"}</span><span>{candidate.votes} vote(s)</span></div>)}</div>)}</div>
+            <div style={sx.stack}>{summary.map((position) => <div key={position.id} style={sx.block}><div style={sx.rowBetween}><div><div style={sx.blockTitle}>{position.name}</div><div style={sx.smallText}>Position ID: {position.id}</div></div><div style={sx.pill}>{position.candidates?.[0]?.votes > 0 ? `${position.candidates[0].votes} leading votes` : "No votes yet"}</div></div>{(position.candidates || []).map((candidate) => <div key={candidate.id} style={sx.resultRow}><span>{candidate.name}</span><span>{candidate.dept || "-"}</span><span>{candidate.votes} vote(s)</span></div>)}</div>)}</div>
           </section>}
 
-          {tab === "manage" && <section style={styles.card}><div style={styles.rowBetween}><h2 style={styles.h2}>Manage Ballot</h2><div style={styles.row}><button style={styles.btn} onClick={addPosition}>Add Position</button><button style={styles.primaryBtn} onClick={saveCurrentElection} disabled={loading}>Save Current Election</button></div></div>{draftPositions.map((position) => <div key={position.id} style={{ ...styles.block, marginTop: 12 }}><div style={styles.rowBetween}><div style={styles.row}><div style={styles.pill}>{position.id}</div><input style={styles.input} value={position.name || ""} onChange={(e) => patchPosition(position.id, { name: e.target.value })} /></div><div style={styles.row}><button style={styles.btn} onClick={() => addCandidate(position.id)}>Add Candidate</button><button style={styles.dangerBtn} onClick={() => removePosition(position.id)}>Remove Position</button></div></div>{(position.candidates || []).map((candidate) => <div key={candidate.id} style={styles.candidateRow}><div style={styles.smallText}>{candidate.id}</div><input style={styles.input} value={candidate.name || ""} onChange={(e) => patchCandidate(position.id, candidate.id, { name: e.target.value })} /><input style={styles.input} value={candidate.dept || ""} onChange={(e) => patchCandidate(position.id, candidate.id, { dept: e.target.value })} /><button style={styles.dangerBtn} onClick={() => removeCandidate(position.id, candidate.id)}>Delete</button></div>)}</div>)}</section>}
+          {tab === "manage" && <section style={sx.card}><div style={sx.rowBetween}><h2 style={sx.h2}>Manage Ballot</h2><div style={sx.row}><button style={sx.btn} onClick={addPosition}>Add Position</button><button style={sx.primaryBtn} onClick={saveCurrentElection} disabled={loading}>Save Current Election</button></div></div>{draftPositions.map((position) => <div key={position.id} style={{ ...sx.block, marginTop: 12 }}><div style={sx.rowBetween}><div style={sx.row}><div style={sx.pill}>{position.id}</div><input style={sx.input} value={position.name || ""} onChange={(e) => patchPosition(position.id, { name: e.target.value })} /></div><div style={sx.row}><button style={sx.btn} onClick={() => addCandidate(position.id)}>Add Candidate</button><button style={sx.dangerBtn} onClick={() => removePosition(position.id)}>Remove Position</button></div></div>{(position.candidates || []).map((candidate) => <div key={candidate.id} style={sx.candidateRow}><div style={sx.smallText}>{candidate.id}</div><input style={sx.input} value={candidate.name || ""} onChange={(e) => patchCandidate(position.id, candidate.id, { name: e.target.value })} /><input style={sx.input} value={candidate.dept || ""} onChange={(e) => patchCandidate(position.id, candidate.id, { dept: e.target.value })} /><button style={sx.dangerBtn} onClick={() => removeCandidate(position.id, candidate.id)}>Delete</button></div>)}</div>)}</section>}
 
-          {tab === "schedule" && <section style={styles.card}><h2 style={styles.h2}>Election Schedule</h2><div style={styles.grid}><div style={styles.block}><div style={styles.blockTitle}>Current Election</div><div style={styles.form}><input style={styles.input} placeholder="Title" value={schedule.title} onChange={(e) => setSchedule((prev) => ({ ...prev, title: e.target.value }))} /><input style={styles.input} type="datetime-local" value={schedule.startsAt} onChange={(e) => setSchedule((prev) => ({ ...prev, startsAt: e.target.value }))} /><input style={styles.input} type="datetime-local" value={schedule.endsAt} onChange={(e) => setSchedule((prev) => ({ ...prev, endsAt: e.target.value }))} /><label style={styles.checkbox}><input type="checkbox" checked={schedule.isActive} onChange={(e) => setSchedule((prev) => ({ ...prev, isActive: e.target.checked }))} /> Election enabled</label><input style={styles.input} type="password" placeholder="Admin password if reauth is enabled" value={schedule.adminPassword} onChange={(e) => setSchedule((prev) => ({ ...prev, adminPassword: e.target.value }))} /><div style={styles.row}><button style={styles.primaryBtn} onClick={saveCurrentElection}>Save Schedule</button><button style={styles.btn} onClick={() => toggleElection(!schedule.isActive)}>{schedule.isActive ? "Disable" : "Enable"}</button><button style={styles.dangerBtn} onClick={archiveElection}>Archive</button></div></div></div><div style={styles.block}><div style={styles.blockTitle}>Create New Election</div><div style={styles.form}><input style={styles.input} placeholder="New election title" value={newElection.title} onChange={(e) => setNewElection((prev) => ({ ...prev, title: e.target.value }))} /><input style={styles.input} type="datetime-local" value={newElection.startsAt} onChange={(e) => setNewElection((prev) => ({ ...prev, startsAt: e.target.value }))} /><input style={styles.input} type="datetime-local" value={newElection.endsAt} onChange={(e) => setNewElection((prev) => ({ ...prev, endsAt: e.target.value }))} /><label style={styles.checkbox}><input type="checkbox" checked={newElection.isActive} onChange={(e) => setNewElection((prev) => ({ ...prev, isActive: e.target.checked }))} /> Activate immediately</label><input style={styles.input} type="password" placeholder="Admin password if reauth is enabled" value={newElection.adminPassword} onChange={(e) => setNewElection((prev) => ({ ...prev, adminPassword: e.target.value }))} /><div style={styles.smallText}>The new election will reuse the ballot draft from the Manage Ballot tab.</div><button style={styles.primaryBtn} onClick={createElection}>Create New Election</button></div></div></div></section>}
+          {tab === "schedule" && <section style={sx.card}><h2 style={sx.h2}>Election Schedule</h2><div style={sx.grid}><div style={sx.block}><div style={sx.blockTitle}>Current Election</div><div style={sx.form}><input style={sx.input} placeholder="Title" value={schedule.title} onChange={(e) => setSchedule((prev) => ({ ...prev, title: e.target.value }))} /><input style={sx.input} type="datetime-local" value={schedule.startsAt} onChange={(e) => setSchedule((prev) => ({ ...prev, startsAt: e.target.value }))} /><input style={sx.input} type="datetime-local" value={schedule.endsAt} onChange={(e) => setSchedule((prev) => ({ ...prev, endsAt: e.target.value }))} /><label style={sx.checkbox}><input type="checkbox" checked={schedule.isActive} onChange={(e) => setSchedule((prev) => ({ ...prev, isActive: e.target.checked }))} /> Election enabled</label><input style={sx.input} type="password" placeholder="Admin password if reauth is enabled" value={schedule.adminPassword} onChange={(e) => setSchedule((prev) => ({ ...prev, adminPassword: e.target.value }))} /><div style={sx.row}><button style={sx.primaryBtn} onClick={saveCurrentElection}>Save Schedule</button><button style={sx.btn} onClick={() => toggleElection(!schedule.isActive)}>{schedule.isActive ? "Disable" : "Enable"}</button><button style={sx.dangerBtn} onClick={archiveElection}>Archive</button></div></div></div><div style={sx.block}><div style={sx.blockTitle}>Create New Election</div><div style={sx.form}><input style={sx.input} placeholder="New election title" value={newElection.title} onChange={(e) => setNewElection((prev) => ({ ...prev, title: e.target.value }))} /><input style={sx.input} type="datetime-local" value={newElection.startsAt} onChange={(e) => setNewElection((prev) => ({ ...prev, startsAt: e.target.value }))} /><input style={sx.input} type="datetime-local" value={newElection.endsAt} onChange={(e) => setNewElection((prev) => ({ ...prev, endsAt: e.target.value }))} /><label style={sx.checkbox}><input type="checkbox" checked={newElection.isActive} onChange={(e) => setNewElection((prev) => ({ ...prev, isActive: e.target.checked }))} /> Activate immediately</label><input style={sx.input} type="password" placeholder="Admin password if reauth is enabled" value={newElection.adminPassword} onChange={(e) => setNewElection((prev) => ({ ...prev, adminPassword: e.target.value }))} /><div style={sx.smallText}>The new election will reuse the ballot draft from the Manage Ballot tab.</div><button style={sx.primaryBtn} onClick={createElection}>Create New Election</button></div></div></div></section>}
 
-          {tab === "admins" && <section style={styles.card}><div style={styles.grid}><form style={styles.block} onSubmit={submitAdmin}><div style={styles.blockTitle}>Add Admin</div><div style={styles.form}><input style={styles.input} placeholder="Admin email" value={adminForm.email} onChange={(e) => setAdminForm((prev) => ({ ...prev, email: e.target.value }))} /><input style={styles.input} placeholder="Admin matric" value={adminForm.matric} onChange={(e) => setAdminForm((prev) => ({ ...prev, matric: e.target.value }))} /><input style={styles.input} type="password" placeholder="Temporary password" value={adminForm.password} onChange={(e) => setAdminForm((prev) => ({ ...prev, password: e.target.value }))} /><input style={styles.input} type="password" placeholder="Admin password if reauth is enabled" value={adminForm.adminPassword} onChange={(e) => setAdminForm((prev) => ({ ...prev, adminPassword: e.target.value }))} /><button type="submit" style={styles.primaryBtn}>Create Admin</button></div></form><div style={styles.block}><div style={styles.blockTitle}>Existing Admins</div>{admins.map((admin) => <div key={admin._id || admin.id} style={styles.candidateRow}><div>{admin.email}</div><div>{admin.matric}</div><div>{prettyDate(admin.createdAt)}</div><button style={styles.dangerBtn} onClick={() => removeAdmin(admin._id || admin.id)}>Remove</button></div>)}</div></div></section>}
+          {tab === "admins" && <section style={sx.card}><div style={sx.grid}><form style={sx.block} onSubmit={submitAdmin}><div style={sx.blockTitle}>Add Admin</div><div style={sx.form}><input style={sx.input} placeholder="Admin email" value={adminForm.email} onChange={(e) => setAdminForm((prev) => ({ ...prev, email: e.target.value }))} /><input style={sx.input} placeholder="Admin matric" value={adminForm.matric} onChange={(e) => setAdminForm((prev) => ({ ...prev, matric: e.target.value }))} /><input style={sx.input} type="password" placeholder="Temporary password" value={adminForm.password} onChange={(e) => setAdminForm((prev) => ({ ...prev, password: e.target.value }))} /><input style={sx.input} type="password" placeholder="Admin password if reauth is enabled" value={adminForm.adminPassword} onChange={(e) => setAdminForm((prev) => ({ ...prev, adminPassword: e.target.value }))} /><button type="submit" style={sx.primaryBtn}>Create Admin</button></div></form><div style={sx.block}><div style={sx.blockTitle}>Existing Admins</div>{admins.map((admin) => <div key={admin._id || admin.id} style={sx.candidateRow}><div>{admin.email}</div><div>{admin.matric}</div><div>{prettyDate(admin.createdAt)}</div><button style={sx.dangerBtn} onClick={() => removeAdmin(admin._id || admin.id)}>Remove</button></div>)}</div></div></section>}
 
-          {tab === "history" && <section style={styles.card}><h2 style={styles.h2}>Election History</h2>{elections.map((election) => <div key={election.key} style={styles.block}><div style={styles.rowBetween}><div><div style={styles.blockTitle}>{election.title}</div><div style={styles.smallText}>{election.key}</div></div><div style={styles.pill}>{election.isCurrent ? "Current" : election.isActive ? "Active" : "Inactive"}</div></div><div style={styles.line}>Window: {prettyDate(election.startsAt)} - {prettyDate(election.endsAt)}</div><div style={styles.line}>Archived: {prettyDate(election.archivedAt)}</div></div>)}</section>}
+          {tab === "history" && <section style={sx.card}><h2 style={sx.h2}>Election History</h2>{elections.map((election) => <div key={election.key} style={sx.block}><div style={sx.rowBetween}><div><div style={sx.blockTitle}>{election.title}</div><div style={sx.smallText}>{election.key}</div></div><div style={sx.pill}>{election.isCurrent ? "Current" : election.isActive ? "Active" : "Inactive"}</div></div><div style={sx.line}>Window: {prettyDate(election.startsAt)} - {prettyDate(election.endsAt)}</div><div style={sx.line}>Archived: {prettyDate(election.archivedAt)}</div></div>)}</section>}
 
-          {tab === "tools" && <section style={styles.card}><div style={styles.grid}><div style={styles.block}><div style={styles.blockTitle}>Downloads</div><div style={styles.form}><button style={styles.btn} onClick={() => download("/api/admin/report/export", "election-report.csv")}>Download Election Report</button><button style={styles.btn} onClick={() => download("/api/admin/audit/export", "admin-audit.csv")}>Download Audit CSV</button><button style={styles.btn} onClick={() => download("/api/admin/backup/export", "backup.json")}>Download Backup JSON</button></div></div><div style={styles.block}><div style={styles.blockTitle}>Restore Backup</div><div style={styles.form}><textarea style={styles.textarea} placeholder="Paste backup JSON here" value={restoreForm.snapshotText} onChange={(e) => setRestoreForm((prev) => ({ ...prev, snapshotText: e.target.value }))} /><input style={styles.input} type="password" placeholder="Admin password if reauth is enabled" value={restoreForm.adminPassword} onChange={(e) => setRestoreForm((prev) => ({ ...prev, adminPassword: e.target.value }))} /><div style={styles.smallText}>Restore uses merge mode. Existing records are kept.</div><button style={styles.primaryBtn} onClick={restoreBackup}>Restore Backup</button></div></div></div></section>}
+          {tab === "tools" && <section style={sx.card}><div style={sx.grid}><div style={sx.block}><div style={sx.blockTitle}>Downloads</div><div style={sx.form}><button style={sx.btn} onClick={() => download("/api/admin/report/export", "election-report.csv")}>Download Election Report</button><button style={sx.btn} onClick={() => download("/api/admin/audit/export", "admin-audit.csv")}>Download Audit CSV</button><button style={sx.btn} onClick={() => download("/api/admin/backup/export", "backup.json")}>Download Backup JSON</button></div></div><div style={sx.block}><div style={sx.blockTitle}>Restore Backup</div><div style={sx.form}><textarea style={sx.textarea} placeholder="Paste backup JSON here" value={restoreForm.snapshotText} onChange={(e) => setRestoreForm((prev) => ({ ...prev, snapshotText: e.target.value }))} /><input style={sx.input} type="password" placeholder="Admin password if reauth is enabled" value={restoreForm.adminPassword} onChange={(e) => setRestoreForm((prev) => ({ ...prev, adminPassword: e.target.value }))} /><div style={sx.smallText}>Restore uses merge mode. Existing records are kept.</div><button style={sx.primaryBtn} onClick={restoreBackup}>Restore Backup</button></div></div></div></section>}
         </main>
       </div>
     </div>
@@ -400,4 +515,5 @@ const styles = {
   smallText: { fontSize: 12, opacity: 0.72 },
   textarea: { minHeight: 220, width: "100%", padding: 12, borderRadius: 14, border: "1px solid rgba(255,255,255,.12)", background: "rgba(255,255,255,.04)", color: "inherit", resize: "vertical", outline: "none" },
 };
+
 

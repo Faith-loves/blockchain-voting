@@ -6,6 +6,18 @@ html, body, #root{
   overflow-x:hidden;
 }
 
+*, *::before, *::after{
+  box-sizing:border-box;
+}
+
+button, input, textarea{
+  max-width:100%;
+}
+
+button{
+  min-height:44px;
+}
+
 /* Home/Auth pages still lock scrolling */
 .home, .auth{
   position:fixed;
@@ -154,6 +166,13 @@ html, body, #root{
 .authBtn:hover{transform:translateY(-2px); box-shadow:0 15px 50px rgba(0,0,0,.45);}
 .linkBtn{background:none;border:none;color:#ccc;margin-top:10px;cursor:pointer;}
 .linkBtn:hover{color:white;}
+
+.authFooter{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  margin-top:10px;
+}
 
 /* ---------- DASHBOARD (scroll enabled) ---------- */
 .dashPage{
@@ -520,4 +539,151 @@ html, body, #root{
   color:white;
   font-size:13px;
   line-height:1.35;
+}
+
+@media (max-width: 760px){
+  .home, .auth{
+    position:relative;
+    min-height:100svh;
+    overflow:auto;
+  }
+
+  .content,
+  .authWrap{
+    min-height:100svh;
+    padding:16px;
+    align-items:center;
+  }
+
+  .panel,
+  .authCard{
+    width:100%;
+    padding:22px;
+    border-radius:18px;
+  }
+
+  .title{
+    font-size:clamp(32px, 10vw, 42px);
+  }
+
+  .subtitle{
+    font-size:16px;
+  }
+
+  .type{
+    font-size:20px;
+    min-height:56px;
+  }
+
+  .actions,
+  .authFooter,
+  .dashHeaderBtns,
+  .voteBtns,
+  .voteNav,
+  .modalBtns{
+    display:grid;
+    grid-template-columns:1fr;
+    width:100%;
+  }
+
+  .btn,
+  .btn2,
+  .authBtn{
+    width:100%;
+  }
+
+  .dashContainer,
+  .voteWrap{
+    width:min(100% - 24px, 1200px);
+    padding:18px 0;
+  }
+
+  .dashHeader,
+  .voteTop{
+    align-items:stretch;
+  }
+
+  .dashH1,
+  .voteH1{
+    font-size:clamp(28px, 9vw, 34px);
+    line-height:1.12;
+  }
+
+  .dashP,
+  .voteP{
+    font-size:14px;
+  }
+
+  .cardGlass{
+    border-radius:16px;
+    padding:14px;
+  }
+
+  .cardTitleRow,
+  .posItem,
+  .reviewRow{
+    align-items:stretch;
+    flex-direction:column;
+  }
+
+  .posLeft{
+    align-items:flex-start;
+  }
+
+  .counterPill,
+  .statusPill{
+    width:max-content;
+  }
+
+  .candCard{
+    align-items:flex-start;
+  }
+
+  .candAvatar{
+    flex:0 0 auto;
+  }
+
+  .modalBackdrop{
+    padding:14px;
+    place-items:end center;
+  }
+
+  .modalCard{
+    width:100%;
+    max-height:calc(100svh - 28px);
+    overflow:auto;
+    border-radius:18px;
+  }
+}
+
+@media (max-width: 480px){
+  .panel,
+  .authCard{
+    padding:18px;
+  }
+
+  .tag,
+  .chip,
+  .counterPill,
+  .statusPill{
+    font-size:11px;
+  }
+
+  .candCard{
+    display:grid;
+    grid-template-columns:auto minmax(0, 1fr) auto;
+  }
+
+  .candName,
+  .posName,
+  .reviewPos,
+  .cardSub,
+  .modalText{
+    overflow-wrap:anywhere;
+  }
+
+  .star{
+    width:40px;
+    height:40px;
+  }
 }
