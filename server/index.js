@@ -29,10 +29,24 @@ const app = express();
 
 const isProd = process.env.NODE_ENV === "production";
 const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || "http://localhost:5173";
-const RENDER_URL = "https://blockchain-voting-ebop.onrender.com";
+const CLIENT_ORIGINS = (process.env.CLIENT_ORIGINS || CLIENT_ORIGIN)
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
 const PORT = process.env.PORT || 5000;
 const MONGO_URI = process.env.MONGO_URI;
 const JWT_SECRET = process.env.JWT_SECRET;
+const cookieOptions = {
+  httpOnly: true,
+  secure: isProd,
+  sameSite: isProd ? "none" : "strict",
+  maxAge: 7 * 24 * 60 * 60 * 1000,
+  path: "/",
+};
+const csrfCookieOptions = {
+  ...cookieOptions,
+  httpOnly: false,
+};
 
 if (!MONGO_URI) {
   console.error("Missing MONGO_URI");
@@ -85,22 +99,12 @@ async function getCurrentElection() {
 
 function issueAuthCookies(res, token) {
   const csrfToken = crypto.randomBytes(24).toString("hex");
-  res.cookie("auth_token", token, {
-    httpOnly: true,
-    secure: isProd,
-    sameSite: "strict",
-    maxAge: 7 * 24 * 60 * 60 * 1000,
-    path: "/",
-  });
-  res.cookie("csrf_token", csrfToken, {
-    httpOnly: false,
-    secure: isProd,
-    sameSite: "strict",
-    maxAge: 7 * 24 * 60 * 60 * 1000,
-    path: "/",
-  });
+  res.cookie("auth_token", token, cookieOptions);
+  res.cookie("csrf_token", csrfToken, csrfCookieOptions);
   return csrfToken;
 }
+
+app.set("trust proxy", 1);
 
 // FIX 1: Disable Helmet's CSP — it intercepts Vite's hashed assets
 // and returns an HTML error page instead of the actual CSS/JS files,
@@ -113,8 +117,7 @@ app.use(
   cors({
     origin(origin, cb) {
       if (!origin) return cb(null, true);
-      if (origin === CLIENT_ORIGIN) return cb(null, true);
-      if (origin === RENDER_URL) return cb(null, true);
+      if (CLIENT_ORIGINS.includes(origin)) return cb(null, true);
       return cb(new Error("CORS blocked"));
     },
     credentials: true,
@@ -316,8 +319,8 @@ app.post("/api/auth/login", async (req, res) => {
 });
 
 app.post("/api/auth/logout", (req, res) => {
-  res.clearCookie("auth_token", { path: "/" });
-  res.clearCookie("csrf_token", { path: "/" });
+  res.clearCookie("auth_token", cookieOptions);
+  res.clearCookie("csrf_token", csrfCookieOptions);
   return res.json({ ok: true });
 });
 
