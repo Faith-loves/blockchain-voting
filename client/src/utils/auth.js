@@ -3,7 +3,7 @@ import { API_BASE_URL } from "../config";
 // client/src/utils/auth.js
 const KEY = "bv_session_v1";
 
-export function saveSession({ user }) {
+export function saveSession({ user, csrfToken }) {
   const payload = {
     user: {
       id: user?.id || user?._id || "",
@@ -11,6 +11,7 @@ export function saveSession({ user }) {
       matric: (user?.matric || "").toUpperCase(),
       role: user?.role || "voter",
     },
+    csrfToken: csrfToken || "",
   };
   localStorage.setItem(KEY, JSON.stringify(payload));
 }
@@ -40,7 +41,8 @@ export function getToken() {
 
 export function getCsrfToken() {
   const m = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]+)/);
-  return m ? decodeURIComponent(m[1]) : "";
+  if (m) return decodeURIComponent(m[1]);
+  return getSession()?.csrfToken || "";
 }
 
 export function csrfHeaders() {
@@ -64,3 +66,4 @@ export function isAdmin() {
   const s = getSession();
   return s?.user?.role === "admin";
 }
+

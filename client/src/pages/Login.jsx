@@ -33,7 +33,7 @@ export default function Login() {
       });
       const data = await res.json();
       if (!res.ok || !data?.ok) throw new Error(data?.message || "Login failed");
-      saveSession({ user: data.user });
+      saveSession({ user: data.user, csrfToken: data.csrfToken });
       nav((data?.user?.role || "voter") === "admin" ? "/admin" : "/dashboard", { replace: true });
     } catch (e2) {
       setErr(String(e2?.message || e2));
@@ -85,3 +85,4 @@ export default function Login() {
     </div>
   );
 }
+
