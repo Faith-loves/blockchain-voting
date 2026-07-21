@@ -33,6 +33,11 @@ const CLIENT_ORIGINS = (process.env.CLIENT_ORIGINS || CLIENT_ORIGIN)
   .split(",")
   .map((origin) => origin.trim())
   .filter(Boolean);
+const VERCEL_PREVIEW_ORIGIN = /^https:\/\/blockchain-voting-[a-z0-9-]+\.vercel\.app$/i;
+
+function isAllowedOrigin(origin) {
+  return CLIENT_ORIGINS.includes(origin) || VERCEL_PREVIEW_ORIGIN.test(origin);
+}
 const PORT = process.env.PORT || 5000;
 const MONGO_URI = process.env.MONGO_URI;
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -117,7 +122,7 @@ app.use(
   cors({
     origin(origin, cb) {
       if (!origin) return cb(null, true);
-      if (CLIENT_ORIGINS.includes(origin)) return cb(null, true);
+      if (isAllowedOrigin(origin)) return cb(null, true);
       return cb(new Error("CORS blocked"));
     },
     credentials: true,
@@ -146,7 +151,7 @@ app.use((req, res, next) => {
   const requestOrigin = req.headers.origin || "";
   const csrfCookie = req.cookies?.csrf_token || "";
   const csrfHeader = req.headers["x-csrf-token"] || "";
-  const trustedSplitFrontend = isProd && requestOrigin && CLIENT_ORIGINS.includes(requestOrigin);
+  const trustedSplitFrontend = isProd && requestOrigin && isAllowedOrigin(requestOrigin);
 
   if (trustedSplitFrontend && csrfHeader) {
     return next();
@@ -566,4 +571,5 @@ app.get("*", (req, res, next) => {
 });
 
 app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
+
 
