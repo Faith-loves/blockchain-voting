@@ -143,9 +143,16 @@ app.use((req, res, next) => {
   ]);
   if (openPaths.has(req.path)) return next();
 
+  const requestOrigin = req.headers.origin || "";
   const csrfCookie = req.cookies?.csrf_token || "";
   const csrfHeader = req.headers["x-csrf-token"] || "";
-  if (!csrfCookie || csrfCookie !== csrfHeader) {
+  const trustedSplitFrontend = isProd && requestOrigin && CLIENT_ORIGINS.includes(requestOrigin);
+
+  if (trustedSplitFrontend && csrfHeader) {
+    return next();
+  }
+
+  if (!csrfCookie || !csrfHeader || csrfCookie !== csrfHeader) {
     return res.status(403).json({ ok: false, message: "CSRF token invalid" });
   }
   return next();
@@ -559,3 +566,4 @@ app.get("*", (req, res, next) => {
 });
 
 app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
+
